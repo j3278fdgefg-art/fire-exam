@@ -4,11 +4,15 @@
 
 ## 使用方式
 
+- **本機**：雙擊桌面「消防考試系統」捷徑（或 `start.bat`），會自動啟動伺服器並開啟瀏覽器；直接雙擊 index.html 也可運作。
+- **其他電腦／手機**：開啟 GitHub Pages 網址（部署後填入）。
+- **資料搬移**：學習紀錄存在各瀏覽器的 localStorage。換瀏覽器或裝置時，到「讀書計畫 → 資料備份」匯出 JSON，再到新裝置匯入。
+
+手動啟動伺服器：
+
 ```
 python -m http.server 8901 --directory C:\阿喜\AI\fire-exam
 ```
-
-瀏覽器開 http://localhost:8901 （或直接雙擊 index.html 也可運作）。
 
 ## 功能
 
