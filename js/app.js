@@ -1103,6 +1103,8 @@ function pushCloudSoon() {
 }
 async function pushCloud() {
   if (!syncKeyHash) return;
+  // 舊資料可能還沒有 _ts，補上再推，否則其他裝置無法判斷新舊
+  if (!store._ts) { store._ts = Date.now(); localStorage.setItem("fireExam", JSON.stringify(store)); }
   syncState = "syncing"; updateSyncUI();
   try {
     const r = await fetch(SYNC_API, {
