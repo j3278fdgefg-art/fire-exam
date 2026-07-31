@@ -8,7 +8,15 @@
 使用者同時準備消防設備師＋士兩種國考。
 
 - 線上版：https://j3278fdgefg-art.github.io/fire-exam/ （GitHub Pages，master 分支根目錄；`git push` 後約一分鐘自動重新部署）
+- 同站鏡像＋同步 API：https://fire-exam.vercel.app （Vercel 專案 longleeeeg/fire-exam；改了 api/ 之後要跑 `vercel deploy --prod`，靜態部分兩邊都要更新）
 - 本機預覽：`python -m http.server 8901` 或雙擊 start.bat；.claude/launch.json 設定名稱 `fire-exam`
+
+## 雲端同步（api/sync.js）
+
+- 使用者自訂「同步碼」，前端 sha256 後當鍵，整份 store 存 Vercel Blob（私有 store fire-exam-sync）；最後寫入者為準（store._ts 比大小）。
+- 讀取務必走 `head().url + ?v=時間戳`＋Bearer BLOB_READ_WRITE_TOKEN——**downloadUrl 會回舊版快取內容，勿改用**。
+- 防呆規則（勿移除）：①開機整理（如 noteHtml 轉換）用 persist() 不蓋 _ts，只有使用者操作的 save() 蓋；②pullCloud 中「空資料不得蓋掉有紀錄的一方」，不論時間戳。
+- 同步碼存 localStorage `fireExamSyncCode`（裝置層級，不進 store、不進備份檔）。
 
 ## 檔案結構
 
