@@ -39,6 +39,12 @@ const DEFAULT_STORE = {
   daily: {},    // "YYYY-MM-DD" -> 作答題數
 };
 let store = loadStore();
+// 雲端同步狀態（宣告須在任何可能觸發 save() 的頂層程式之前，避免 TDZ）
+const SYNC_API = "https://fire-exam.vercel.app/api/sync";
+let syncKeyHash = null;
+let syncPushTimer = null;
+let syncState = "off";   // off | syncing | ok | error
+let syncLastAt = null;
 function loadStore() {
   try {
     const raw = localStorage.getItem("fireExam");
@@ -1061,12 +1067,6 @@ function renderPlan() {
 
 // ===== 雲端同步 =====
 // 以使用者自訂「同步碼」的 SHA-256 為鍵，整份 store 存 Vercel Blob；最後寫入者為準（_ts 比大小）
-const SYNC_API = "https://fire-exam.vercel.app/api/sync";
-let syncKeyHash = null;
-let syncPushTimer = null;
-let syncState = "off";   // off | syncing | ok | error
-let syncLastAt = null;
-
 async function sha256Hex(s) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
