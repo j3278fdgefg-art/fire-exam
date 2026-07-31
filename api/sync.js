@@ -22,10 +22,11 @@ export default async function handler(req, res) {
   if (req.method === "GET") {
     try {
       const meta = await head(pathname);
-      // downloadUrl 每次呼叫都重新簽名（網址不同），可繞過覆寫後殘留的 CDN 快取
-      const auth = { authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` };
-      let r = await fetch(meta.downloadUrl, { cache: "no-store", headers: auth });
-      if (!r.ok) r = await fetch(`${meta.url}?v=${Date.now()}`, { cache: "no-store", headers: auth });
+      // 帶唯一時間戳參數讀取，繞過覆寫後殘留的 CDN 快取（downloadUrl 會回舊版，勿用）
+      const r = await fetch(`${meta.url}?v=${Date.now()}`, {
+        cache: "no-store",
+        headers: { authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
+      });
       if (!r.ok) throw new Error(`blob fetch ${r.status}`);
       return res.status(200).json(await r.json());
     } catch (e) {
