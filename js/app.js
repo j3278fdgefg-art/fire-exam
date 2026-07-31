@@ -52,9 +52,10 @@ function loadStore() {
   } catch (e) { /* 壞資料重來 */ }
   return JSON.parse(JSON.stringify(DEFAULT_STORE));
 }
+function persist() { localStorage.setItem("fireExam", JSON.stringify(store)); }
 function save() {
-  store._ts = Date.now();   // 雲端同步用：整份資料的最後修改時間
-  localStorage.setItem("fireExam", JSON.stringify(store));
+  store._ts = Date.now();   // 雲端同步用：整份資料的最後修改時間（只在使用者操作時蓋）
+  persist();
   pushCloudSoon();
 }
 function today() {
@@ -132,10 +133,11 @@ function sanitizeNote(html) {
   return tpl.innerHTML;
 }
 // 舊版純文字解釋一次性轉為 HTML（支援上色後改存 HTML）
+// 注意：這是開機整理，用 persist() 不蓋 _ts，否則全新裝置會被誤判成「比雲端新」
 if (!store.settings.noteHtml) {
   for (const k in store.lawNote) store.lawNote[k] = esc(store.lawNote[k]).replace(/\n/g, "<br>");
   store.settings.noteHtml = true;
-  save();
+  persist();
 }
 
 // ===== 作答紀錄 =====
@@ -1085,9 +1087,12 @@ async function pullCloud() {
     if (r.status === 404) { await pushCloud(); return; }   // 雲端還沒有資料：上傳本地
     if (!r.ok) throw 0;
     const cloud = await r.json();
-    if ((cloud._ts || 0) > (store._ts || 0)) {
+    // 本機沒有實質紀錄時一律採用雲端，避免空資料因時間戳較新而蓋掉雲端
+    const localEmpty = !Object.keys(store.rec).length && !Object.keys(store.lawNote).length
+      && !Object.keys(store.lawRead).length && !Object.keys(store.schedule).length;
+    if (localEmpty || (cloud._ts || 0) > (store._ts || 0)) {
       store = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STORE)), cloud);
-      localStorage.setItem("fireExam", JSON.stringify(store));
+      persist();
       refreshClsBtns(); switchView(currentView);
     } else if ((store._ts || 0) > (cloud._ts || 0)) {
       await pushCloud(); return;
