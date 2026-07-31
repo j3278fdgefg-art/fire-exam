@@ -1087,9 +1087,11 @@ async function pullCloud() {
     if (r.status === 404) { await pushCloud(); return; }   // 雲端還沒有資料：上傳本地
     if (!r.ok) throw 0;
     const cloud = await r.json();
-    // 本機沒有實質紀錄時一律採用雲端，避免空資料因時間戳較新而蓋掉雲端
-    const localEmpty = !Object.keys(store.rec).length && !Object.keys(store.lawNote).length
-      && !Object.keys(store.lawRead).length && !Object.keys(store.schedule).length;
+    // 防呆：空資料不得蓋掉有紀錄的一方，不論時間戳
+    const hasData = s => !!(Object.keys(s.rec || {}).length || Object.keys(s.lawNote || {}).length
+      || Object.keys(s.lawRead || {}).length || Object.keys(s.schedule || {}).length);
+    const localEmpty = !hasData(store);
+    if (!hasData(cloud) && !localEmpty) { await pushCloud(); return; }
     if (localEmpty || (cloud._ts || 0) > (store._ts || 0)) {
       store = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STORE)), cloud);
       persist();
