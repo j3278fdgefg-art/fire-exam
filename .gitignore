@@ -4,3 +4,6 @@ fire-exam-備份-*.json
 # 開發過程產物
 screenshots/
 shot.html
+
+.vercel
+.env*

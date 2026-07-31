@@ -46,7 +46,11 @@ function loadStore() {
   } catch (e) { /* 壞資料重來 */ }
   return JSON.parse(JSON.stringify(DEFAULT_STORE));
 }
-function save() { localStorage.setItem("fireExam", JSON.stringify(store)); }
+function save() {
+  store._ts = Date.now();   // 雲端同步用：整份資料的最後修改時間
+  localStorage.setItem("fireExam", JSON.stringify(store));
+  pushCloudSoon();
+}
 function today() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -986,18 +990,48 @@ function renderPlan() {
       <p class="muted" style="margin-top:8px">綠色代表達成每日目標。</p>
     </div>
     <div class="card">
-      <h2>資料備份</h2>
+      <h2>雲端同步與資料備份</h2>
       <div class="row">
+        ${localStorage.getItem("fireExamSyncCode") ? `
+          <span class="tag blue">☁ 雲端同步已啟用</span>
+          <span class="muted" id="syncStatus"></span>
+          <button class="btn small" id="syncNow">立即同步</button>
+          <button class="btn ghost small" id="syncOff">停用同步</button>`
+        : `
+          <input type="text" id="syncCode" placeholder="自訂一組同步碼（至少 6 個字）" style="width:230px">
+          <button class="btn small" id="syncOn">☁ 啟用雲端同步</button>`}
+      </div>
+      <p class="muted">啟用後，紀錄會自動同步到雲端；在其他電腦、手機輸入同一組同步碼即可接續讀書進度。同步碼就是你的鑰匙——自己記住、不要外流，忘記就取不回雲端資料。</p>
+      <div class="row" style="margin-top:8px">
         <button class="btn ghost" id="expData">⬇ 匯出學習資料</button>
         <button class="btn ghost" id="impData">⬆ 匯入學習資料</button>
         <input type="file" id="impFile" accept=".json" class="hidden">
       </div>
-      <p class="muted">所有紀錄（作答、筆記、行程…）都存在這個瀏覽器裡。換瀏覽器、換電腦或清理瀏覽器資料前，請先匯出檔案保存；匯入會以檔案內容覆蓋目前紀錄。</p>
+      <p class="muted">匯出／匯入為手動備份，清理瀏覽器資料前建議留一份檔案；匯入會以檔案內容覆蓋目前紀錄。</p>
     </div>`;
   document.getElementById("planDate").onchange = e => { s.examDate = e.target.value; save(); renderPlan(); };
   document.getElementById("planTarget").onchange = e => {
     s.dailyTarget = Math.max(5, parseInt(e.target.value) || 40); save(); renderPlan();
   };
+  const syncOnBtn = document.getElementById("syncOn");
+  if (syncOnBtn) syncOnBtn.onclick = async () => {
+    const code = document.getElementById("syncCode").value.trim();
+    if (code.length < 6) { alert("同步碼至少 6 個字，太短容易被猜到"); return; }
+    if (!window.isSecureContext) { alert("此開啟方式不支援同步，請改用網址開啟（https 或 localhost）"); return; }
+    localStorage.setItem("fireExamSyncCode", code);
+    syncKeyHash = await sha256Hex(code);
+    await pullCloud();
+    renderPlan();
+  };
+  const syncOffBtn = document.getElementById("syncOff");
+  if (syncOffBtn) syncOffBtn.onclick = () => {
+    localStorage.removeItem("fireExamSyncCode");
+    syncKeyHash = null; syncState = "off";
+    renderPlan();
+  };
+  const syncNowBtn = document.getElementById("syncNow");
+  if (syncNowBtn) syncNowBtn.onclick = () => pullCloud();
+  updateSyncUI();
   document.getElementById("expData").onclick = () => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([JSON.stringify(store)], { type: "application/json" }));
@@ -1023,6 +1057,72 @@ function renderPlan() {
     };
     r.readAsText(f);
   };
+}
+
+// ===== 雲端同步 =====
+// 以使用者自訂「同步碼」的 SHA-256 為鍵，整份 store 存 Vercel Blob；最後寫入者為準（_ts 比大小）
+const SYNC_API = "https://fire-exam.vercel.app/api/sync";
+let syncKeyHash = null;
+let syncPushTimer = null;
+let syncState = "off";   // off | syncing | ok | error
+let syncLastAt = null;
+
+async function sha256Hex(s) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+async function initSync() {
+  const code = localStorage.getItem("fireExamSyncCode");
+  if (!code || !window.isSecureContext) return;   // file:// 開啟時無法使用
+  syncKeyHash = await sha256Hex(code);
+  pullCloud();
+}
+async function pullCloud() {
+  if (!syncKeyHash) return;
+  syncState = "syncing"; updateSyncUI();
+  try {
+    const r = await fetch(SYNC_API, { headers: { "x-sync-key": syncKeyHash } });
+    if (r.status === 404) { await pushCloud(); return; }   // 雲端還沒有資料：上傳本地
+    if (!r.ok) throw 0;
+    const cloud = await r.json();
+    if ((cloud._ts || 0) > (store._ts || 0)) {
+      store = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STORE)), cloud);
+      localStorage.setItem("fireExam", JSON.stringify(store));
+      refreshClsBtns(); switchView(currentView);
+    } else if ((store._ts || 0) > (cloud._ts || 0)) {
+      await pushCloud(); return;
+    }
+    syncState = "ok"; syncLastAt = Date.now();
+  } catch { syncState = "error"; }
+  updateSyncUI();
+}
+function pushCloudSoon() {
+  if (!syncKeyHash) return;
+  clearTimeout(syncPushTimer);
+  syncPushTimer = setTimeout(pushCloud, 3000);
+}
+async function pushCloud() {
+  if (!syncKeyHash) return;
+  syncState = "syncing"; updateSyncUI();
+  try {
+    const r = await fetch(SYNC_API, {
+      method: "PUT",
+      headers: { "content-type": "application/json", "x-sync-key": syncKeyHash },
+      body: JSON.stringify(store),
+    });
+    if (!r.ok) throw 0;
+    syncState = "ok"; syncLastAt = Date.now();
+  } catch { syncState = "error"; }
+  updateSyncUI();
+}
+function updateSyncUI() {
+  const el = document.getElementById("syncStatus");
+  if (!el) return;
+  el.textContent = {
+    off: "", syncing: "☁ 同步中…",
+    ok: "✓ 已同步" + (syncLastAt ? `（${new Date(syncLastAt).toLocaleTimeString()}）` : ""),
+    error: "⚠ 同步失敗，下次修改時自動重試",
+  }[syncState];
 }
 
 // ===== 定時彈題 =====
@@ -1081,3 +1181,4 @@ const legacyQuizModes = ["practice", "exam", "essay", "wrong"];
 if (legacyQuizModes.includes(initView)) quizMode = initView;
 switchView(["home", "quiz", "laws", "calendar", "plan"].includes(initView)
   ? initView : legacyQuizModes.includes(initView) ? "quiz" : "home");
+initSync();
