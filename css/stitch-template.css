@@ -1,0 +1,189 @@
+/* Source of truth: Downloads/設計.txt + Stitch stationery_system_variant_b PNGs. */
+:root {
+  --st-paper:#fffdf7;
+  --st-canvas:#f4f1e9;
+  --st-ink:#2c251e;
+  --st-muted:#74695c;
+  --st-blue:#7899a2;
+  --st-blue-soft:#e8f1f3;
+  --st-wood:#ead7b7;
+  --st-tab:#f6ead5;
+  --st-active:#f2cf92;
+  --st-red:#a9533d;
+  --st-line:#b9ad9b;
+  --st-shadow:0 3px 0 #a99d8d,0 10px 20px rgba(61,47,29,.16);
+}
+body {
+  background:
+    radial-gradient(circle at 30% 20%,rgba(255,255,255,.75),transparent 34%),
+    repeating-linear-gradient(0deg,rgba(120,101,72,.035) 0 1px,transparent 1px 5px),
+    var(--st-canvas);
+  color:var(--st-ink);
+}
+header {
+  background:
+    repeating-linear-gradient(0deg,rgba(103,76,43,.075) 0 1px,transparent 1px 5px),
+    linear-gradient(#f0dfc3,#e3cba5);
+  border-bottom:1px solid #8d775d;
+}
+nav button { min-height:44px; }
+main { max-width:1240px; }
+
+.stitch-shell {
+  display:grid;
+  grid-template-columns:155px minmax(0,1fr);
+  align-items:start;
+  gap:0;
+  max-width:1180px;
+  margin-inline:auto;
+}
+.stitch-index {
+  position:relative;
+  z-index:4;
+  padding:28px 0 20px;
+}
+.stitch-index h2 {
+  width:130px;
+  margin:0 0 20px;
+  padding:0 8px 9px;
+  border-bottom:1px solid #8f8271;
+  font-family:"Noto Serif TC",serif;
+  font-size:17px;
+  text-align:center;
+}
+.stitch-tab {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:145px;
+  min-height:48px;
+  margin:0 0 8px;
+  padding:8px 10px;
+  border:1px solid #a99b87;
+  border-radius:8px 0 0 8px;
+  background:linear-gradient(#fffdf7,#eee7da);
+  box-shadow:0 2px 0 #a99d8d,0 4px 9px rgba(65,48,28,.12);
+  color:var(--st-ink);
+  font:600 13px/1.45 "Noto Sans TC",sans-serif;
+  text-align:center;
+}
+button.stitch-tab { cursor:pointer; }
+.stitch-tab.active {
+  background:linear-gradient(100deg,#f6d59d,#f1c97f);
+  border-color:#a56b38;
+  box-shadow:inset 5px 0 var(--st-red),0 2px 0 #9d7654,0 5px 12px rgba(83,54,24,.18);
+}
+.stitch-tab.stitch-add { background:#fffdf7; border-style:dashed; }
+.stitch-paper {
+  position:relative;
+  min-width:0;
+  min-height:700px;
+  padding:32px 34px 42px 58px;
+  border:7px solid var(--st-blue);
+  border-radius:12px;
+  background:
+    linear-gradient(110deg,rgba(255,255,255,.76),transparent 38%),
+    radial-gradient(#d1cec4 .45px,transparent .6px) 0 0/24px 24px,
+    var(--st-paper);
+  box-shadow:var(--st-shadow);
+}
+.stitch-paper::before {
+  content:"";
+  position:absolute;
+  z-index:5;
+  left:-19px;
+  top:34px;
+  bottom:28px;
+  width:35px;
+  pointer-events:none;
+  background:repeating-linear-gradient(to bottom,transparent 0 15px,#686b68 16px 20px,#c0beb5 21px 23px,transparent 24px 38px);
+  filter:drop-shadow(1px 1px 1px rgba(35,31,27,.28));
+}
+.stitch-paper::after,.law-reading::after {
+  content:"";
+  position:absolute;
+  z-index:4;
+  top:-1px;
+  right:-1px;
+  width:32px;
+  height:32px;
+  background:linear-gradient(225deg,#e5ddd0 0 48%,#948c80 50% 52%,#fffdf7 54%);
+  border-radius:0 7px 0 0;
+  pointer-events:none;
+}
+.stitch-paper > * { position:relative; z-index:2; }
+.stitch-paper .card { border:1px solid #b8ad9c; border-radius:8px; background:rgba(255,253,247,.94); box-shadow:0 2px 0 #b3a795,0 6px 14px rgba(64,49,30,.1); }
+
+/* Overview: notebook dashboard rhythm. */
+.stitch-home .stitch-paper { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+.stitch-home .stat-row { grid-column:1/-1; display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:0; }
+.stitch-home .stat { min-width:0; margin:0; border-color:#b8ad9c; }
+.stitch-home .card { margin:0; }
+
+/* Quiz: wide question sheet, two-column answers and a paper explanation card. */
+.stitch-quiz .stitch-paper { padding-top:28px; }
+.stitch-quiz .stitch-paper > .card:first-child { padding:8px 12px; box-shadow:none; background:transparent; border:0; }
+.stitch-quiz .filter-chips { justify-content:center; margin:0 0 18px; }
+.stitch-quiz #quizBody > .card { min-height:520px; padding:30px 36px; }
+.stitch-quiz .q-stem { font-family:"Noto Serif TC",serif; font-size:21px; font-weight:600; }
+.stitch-quiz .choices { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.stitch-quiz .choice { min-height:58px; font-size:18px; font-weight:600; box-shadow:0 3px 0 #b7aa98,0 5px 10px rgba(66,48,27,.1); }
+.stitch-quiz .q-nav { justify-content:center; }
+.stitch-quiz .feedback,.stitch-quiz details { margin-top:24px; padding:20px 24px; border:1px solid #c0ae95; background:#f8e9cc; box-shadow:0 3px 0 #b8a58c; }
+
+/* Calendar: month sheet plus independent daily-task page. */
+.stitch-calendar { max-width:1220px; grid-template-columns:120px minmax(0,1fr); }
+.stitch-calendar .stitch-index { transform:translateX(8px); }
+.stitch-calendar .stitch-paper { display:grid; grid-template-columns:minmax(0,1fr) 255px; gap:16px; padding:0; border:0; background:transparent; box-shadow:none; }
+.stitch-calendar .stitch-paper::before,.stitch-calendar .stitch-paper::after { display:none; }
+.stitch-calendar .card { margin:0; border:7px solid var(--st-blue); border-radius:11px; padding:20px 24px; }
+.stitch-calendar #calDetail { min-width:0; }
+.stitch-calendar .cal-grid { border-color:#827768; }
+.stitch-calendar .cal-day { min-height:92px; padding:7px; background:rgba(255,253,247,.88); }
+.stitch-calendar .cal-day.sel { background:#f4ddb1; }
+.stitch-calendar .cal-item { gap:7px; }
+.stitch-calendar #calDetail > .row { align-items:stretch; }
+
+/* Plan: open-book spread with a center binding. */
+.stitch-plan { grid-template-columns:135px minmax(0,1fr); max-width:1200px; }
+.stitch-plan .stitch-paper { display:grid; grid-template-columns:1fr 1fr; align-content:start; gap:18px 48px; padding:30px 42px; }
+.stitch-plan .stitch-paper::before { left:50%; top:18px; bottom:18px; width:30px; transform:translateX(-15px); }
+.stitch-plan .stitch-paper > .card,.stitch-plan .stitch-paper > .stat-row { margin:0; }
+.stitch-plan .stitch-paper > .card:first-child { grid-column:1; }
+.stitch-plan .stat-row { grid-column:1; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.stitch-plan .stat { min-width:0; padding:12px 6px; }
+.stitch-plan .stitch-paper > .card:nth-child(3) { grid-column:2; grid-row:1/span 2; }
+.stitch-plan .stitch-paper > .card:nth-child(4) { grid-column:1/-1; }
+
+/* Regulation page remains functional while matching the supplied sheet. */
+body[data-view="laws"] main { max-width:1040px; }
+body[data-view="laws"] .law-layout { grid-template-columns:155px minmax(0,1fr); }
+body[data-view="laws"] .law-side { padding-top:28px; }
+body[data-view="laws"] .law-side::before { right:-18px; width:35px; }
+body[data-view="laws"] .law-side button { min-height:50px; margin-bottom:8px; }
+body[data-view="laws"] .law-reading { border-width:7px; padding:28px 26px 36px 50px; }
+body[data-view="laws"] #artList .art-card { min-height:112px; padding:14px 16px 15px 22px; }
+body[data-view="laws"] #artList .art-no { font-size:17px; }
+body[data-view="laws"] #artList .art-text { font-weight:500; }
+body[data-view="laws"] #artList .art-actions .chk { min-width:42px; min-height:44px; }
+
+@media (max-width:900px) {
+  .stitch-shell,.stitch-calendar,.stitch-plan { display:block; }
+  .stitch-index { display:flex; gap:8px; overflow-x:auto; padding:0 0 12px; }
+  .stitch-index h2 { display:none; }
+  .stitch-tab { flex:0 0 142px; margin:0; border-radius:8px; }
+  .stitch-paper { min-height:0; padding:20px 14px; border-width:4px; }
+  .stitch-paper::before { display:none; }
+  .stitch-home .stitch-paper,.stitch-calendar .stitch-paper,.stitch-plan .stitch-paper { display:block; }
+  .stitch-home .stat-row,.stitch-plan .stat-row { grid-template-columns:1fr 1fr; margin-bottom:16px; }
+  .stitch-home .card,.stitch-calendar .card,.stitch-plan .card { margin-bottom:16px; }
+  .stitch-quiz .choices { grid-template-columns:1fr; }
+  .stitch-quiz #quizBody > .card { min-height:0; padding:20px 16px; }
+  .stitch-calendar .card { border-width:4px; padding:16px 12px; }
+  .stitch-calendar #calDetail { margin-top:14px; }
+  body[data-view="laws"] .law-layout { grid-template-columns:1fr; }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  *,*::before,*::after { scroll-behavior:auto!important; transition:none!important; animation:none!important; }
+}

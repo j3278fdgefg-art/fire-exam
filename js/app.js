@@ -209,8 +209,27 @@ function canShuffleChoices(q) {
 // ===== 視圖切換 =====
 const view = document.getElementById("view");
 let currentView = "home";
+function applyStitchShell(kind) {
+  const content = view.innerHTML;
+  const planTabs = ["本週目標", "教材進度", "待完成任務", "歷史紀錄", "新進度"];
+  const lawTabs = allLaws().slice(0, 4);
+  const index = kind === "plan"
+    ? planTabs.map((name, i) => `<span class="stitch-tab ${i === 0 ? "active" : ""}">${name}</span>`).join("")
+    : `${lawTabs.map((law, i) => `<button type="button" class="stitch-tab ${i === 0 ? "active" : ""}" data-stitch-law="${law.key}">${esc(law.name)}</button>`).join("")}<button type="button" class="stitch-tab stitch-add" data-view-laws>新增我的分類</button>`;
+  view.innerHTML = `<div class="stitch-shell stitch-${kind}">
+    <aside class="stitch-index"><h2>${kind === "plan" ? "讀書計畫" : "法規分類"}</h2>${index}</aside>
+    <section class="stitch-paper">${content}</section>
+  </div>`;
+  view.querySelectorAll("[data-stitch-law]").forEach(button => button.onclick = () => {
+    curLaw = button.dataset.stitchLaw;
+    switchView("laws");
+  });
+  const add = view.querySelector("[data-view-laws]");
+  if (add) add.onclick = () => { switchView("laws"); document.getElementById("addCustomLaw")?.click(); };
+}
 function switchView(name) {
   currentView = name;
+  document.body.dataset.view = name;
   document.querySelectorAll("nav button").forEach(b =>
     b.classList.toggle("active", b.dataset.view === name));
   ({ home: renderHome, quiz: renderQuiz, laws: renderLaws,
@@ -272,6 +291,7 @@ function renderHome() {
       </div>
       <p class="muted">開啟後，每隔設定時間會自動跳出一題考古題（優先出你在「法規閱讀」勾選「已讀完」條文的相關題目，並隨機重排選項作為變題）。</p>
     </div>`;
+  applyStitchShell("home");
   document.getElementById("quizOn").onchange = e => { store.settings.quizOn = e.target.checked; save(); scheduleQuiz(); };
   document.getElementById("quizMin").onchange = e => {
     store.settings.quizMin = Math.max(1, parseInt(e.target.value) || 5); save(); scheduleQuiz();
@@ -294,6 +314,7 @@ function renderQuiz() {
         `<button class="${quizMode === m ? "active" : ""}" data-qm="${m}">${t}</button>`).join("")}</div>
     </div>
     <div id="quizBody"></div>`;
+  applyStitchShell("quiz");
   document.querySelectorAll("[data-qm]").forEach(b =>
     b.onclick = () => { quizMode = b.dataset.qm; renderQuiz(); });
   ({ practice: renderPractice, exam: renderExam, essay: renderEssay, wrong: renderWrong }[quizMode])();
@@ -1028,6 +1049,7 @@ function renderCalendar() {
       <div class="cal-grid">${cells.join("")}</div>
     </div>
     <div class="card" id="calDetail"></div>`;
+  applyStitchShell("calendar");
   document.getElementById("calPrev").onclick = () => { calMonth = m ? { y, m: m - 1 } : { y: y - 1, m: 11 }; calEdit = null; renderCalendar(); };
   document.getElementById("calNext").onclick = () => { calMonth = m < 11 ? { y, m: m + 1 } : { y: y + 1, m: 0 }; calEdit = null; renderCalendar(); };
   document.querySelectorAll("[data-day]").forEach(b =>
@@ -1158,6 +1180,7 @@ function renderPlan() {
       </div>
       <p class="muted">匯出／匯入為手動備份，清理瀏覽器資料前建議留一份檔案；匯入會以檔案內容覆蓋目前紀錄。</p>
     </div>`;
+  applyStitchShell("plan");
   document.getElementById("planDate").onchange = e => { s.examDate = e.target.value; save(); renderPlan(); };
   document.getElementById("planTarget").onchange = e => {
     s.dailyTarget = Math.max(5, parseInt(e.target.value) || 40); save(); renderPlan();

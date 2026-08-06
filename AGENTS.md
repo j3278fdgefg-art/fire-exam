@@ -9,3 +9,9 @@
 - 修改流程：先 `git pull` → 本機驗證（`python -m http.server 8901`）→ commit → `git push`（自動部署 GitHub Pages）。
 - 改到 `api/` 時另需 `vercel deploy --prod`。
 - 雲端同步有多條防呆規則（見 CLAUDE.md「雲端同步」節），修改前務必理解，勿破壞。
+
+## Stitch 設計規則
+
+- 每次修改介面前，必須先完整閱讀 `C:\Users\USER\Downloads\設計.txt`。
+- 視覺版型以 `stitch-reference/stitch/stationery_system_variant_b_*/screen.png` 為準；`設計.txt` 用於確認色票、字體與元件規則。
+- 保留現有功能與資料結構，禁止用整張截圖取代可操作介面。
