@@ -12,6 +12,6 @@
 
 ## Stitch 設計規則
 
-- 每次修改介面前，必須先完整閱讀 `C:\Users\USER\Downloads\設計.txt`。
-- 視覺版型以 `stitch-reference/stitch/stationery_system_variant_b_*/screen.png` 為準；`設計.txt` 用於確認色票、字體與元件規則。
+- 每次修改介面前，必須先完整閱讀 `stitch-reference/stitch/stationery_study_system/DESIGN.md`。
+- 視覺版型以 `stitch-reference/stitch/screen.png` 與同層 `code.html` 為主；其他 `screen.png` 只用來補足分頁細節。
 - 保留現有功能與資料結構，禁止用整張截圖取代可操作介面。

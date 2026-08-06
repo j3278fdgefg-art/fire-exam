@@ -211,13 +211,17 @@ const view = document.getElementById("view");
 let currentView = "home";
 function applyStitchShell(kind) {
   const content = view.innerHTML;
+  const readCount = Object.values(store.lawRead).filter(v => v === "read").length;
+  const articleCount = allLaws().reduce((sum, law) => sum + law.articles.length, 0);
   const planTabs = ["本週目標", "教材進度", "待完成任務", "歷史紀錄", "新進度"];
   const lawTabs = allLaws().slice(0, 4);
   const index = kind === "plan"
     ? planTabs.map((name, i) => `<span class="stitch-tab ${i === 0 ? "active" : ""}">${name}</span>`).join("")
     : `${lawTabs.map((law, i) => `<button type="button" class="stitch-tab ${i === 0 ? "active" : ""}" data-stitch-law="${law.key}">${esc(law.name)}</button>`).join("")}<button type="button" class="stitch-tab stitch-add" data-view-laws>新增我的分類</button>`;
   view.innerHTML = `<div class="stitch-shell stitch-${kind}">
-    <aside class="stitch-index"><h2>${kind === "plan" ? "讀書計畫" : "法規分類"}</h2>${index}</aside>
+    <aside class="stitch-index"><h2>${kind === "plan" ? "讀書計畫" : "法規分類"}</h2>
+      ${kind === "plan" ? "" : `<p class="stitch-progress">進度：${readCount}/${articleCount} 條</p><button type="button" class="stitch-search" data-view-search><i class="ph ph-magnifying-glass" aria-hidden="true"></i><span>搜尋條文關鍵字...</span></button>`}
+      ${index}</aside>
     <section class="stitch-paper">${content}</section>
   </div>`;
   view.querySelectorAll("[data-stitch-law]").forEach(button => button.onclick = () => {
@@ -226,6 +230,8 @@ function applyStitchShell(kind) {
   });
   const add = view.querySelector("[data-view-laws]");
   if (add) add.onclick = () => { switchView("laws"); document.getElementById("addCustomLaw")?.click(); };
+  const search = view.querySelector("[data-view-search]");
+  if (search) search.onclick = () => { switchView("laws"); document.getElementById("lSearch")?.focus(); };
 }
 function switchView(name) {
   currentView = name;
@@ -283,7 +289,7 @@ function renderHome() {
       ${cls === "師" ? `<p class="muted">設備師除消防法規外為申論題，請至「申論題庫」練習。</p>` : ""}
     </div>
     <div class="card">
-      <h2>⏰ 讀書提醒彈題</h2>
+      <h2><i class="ph ph-alarm" aria-hidden="true"></i> 讀書提醒彈題</h2>
       <div class="row">
         <label><input type="checkbox" id="quizOn" ${store.settings.quizOn ? "checked" : ""}> 開啟定時彈題</label>
         <label>每 <input type="number" id="quizMin" min="1" max="120" value="${store.settings.quizMin}" style="width:60px"> 分鐘</label>
@@ -307,11 +313,11 @@ function examCountdown() {
 // ===== 題庫測驗（練習＋模擬考合併頁） =====
 let quizMode = "practice";
 function renderQuiz() {
-  const modes = [["practice", "📝 題庫練習"], ["exam", "⏱ 模擬考"], ["essay", "✍️ 申論題庫"], ["wrong", "📕 錯題本"]];
+  const modes = [["practice", "ph-note-pencil", "題庫練習"], ["exam", "ph-timer", "模擬考"], ["essay", "ph-pen-nib", "申論題庫"], ["wrong", "ph-bookmark-simple", "錯題本"]];
   view.innerHTML = `
     <div class="card">
-      <div class="filter-chips">${modes.map(([m, t]) =>
-        `<button class="${quizMode === m ? "active" : ""}" data-qm="${m}">${t}</button>`).join("")}</div>
+      <div class="filter-chips">${modes.map(([m, icon, title]) =>
+        `<button class="${quizMode === m ? "active" : ""}" data-qm="${m}"><i class="ph ${icon}" aria-hidden="true"></i>${title}</button>`).join("")}</div>
     </div>
     <div id="quizBody"></div>`;
   applyStitchShell("quiz");
@@ -736,7 +742,7 @@ function renderLaws() {
         <div class="card">
           <div class="row">
             <h2 style="margin:0">${esc(law.name)}</h2>
-            ${law.custom ? `<span class="tag blue">我的教材</span><button class="btn small" id="addCustomArticle">＋ 新增內容</button><button class="btn ghost small" id="deleteCustomLaw">刪除分類</button>` : `<a class="law-src" href="https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${law.pcode}" target="_blank">🔗 法規資料庫全文</a>`}
+            ${law.custom ? `<span class="tag blue">我的教材</span><button class="btn small" id="addCustomArticle">＋ 新增內容</button><button class="btn ghost small" id="deleteCustomLaw">刪除分類</button>` : `<a class="law-src" href="https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${law.pcode}" target="_blank"><i class="ph ph-link" aria-hidden="true"></i> 法規資料庫全文</a>`}
             <div class="read-progress">
               <span class="muted">閱讀進度 ${readCnt} / ${law.articles.length} 條${skipCnt ? `｜跳過 ${skipCnt}` : ""}</span>
               <div class="bar-wrap"><div class="bar ok" style="width:${Math.round(readCnt / Math.max(law.articles.length, 1) * 100)}%"></div></div>
@@ -752,15 +758,15 @@ function renderLaws() {
         ${customLawEditor ? `<div class="card custom-law-form">
           <h3>${customLawEditor === "category" ? "新增我的分類" : "新增教材內容"}</h3>
           ${customLawEditor === "category" ? `<label>分類名稱<input id="customLawName" type="text" placeholder="例如：水系統重點整理"></label>` : `<label>段落標題<input id="customArticleTitle" type="text" placeholder="例如：加壓送水裝置" value="${customArticleEdit === null ? "" : esc(law.articles[customArticleEdit].no)}"></label><label>內容<textarea id="customArticleText" placeholder="直接貼上或輸入你的教材內容">${customArticleEdit === null ? "" : esc(law.articles[customArticleEdit].text)}</textarea></label>`}
-          <div class="row">${customLawEditor === "article" ? `<button class="btn ghost small" id="customVoiceInput">🎙 語音輸入</button>` : ""}<button class="btn small" id="saveCustomEntry">儲存</button><button class="btn ghost small" id="cancelCustomEntry">取消</button></div>
+          <div class="row">${customLawEditor === "article" ? `<button class="btn ghost small" id="customVoiceInput"><i class="ph ph-microphone" aria-hidden="true"></i> 語音輸入</button>` : ""}<button class="btn small" id="saveCustomEntry">儲存</button><button class="btn ghost small" id="cancelCustomEntry">取消</button></div>
         </div>` : ""}
         <div id="artList"></div>
         </div>
         ${AI_ENABLED ? `<aside class="card ai-tutor">
-          <div class="row"><h3 style="margin:0">✨ 教材 AI 助教</h3><label class="ai-provider-label">模型<select id="aiProvider"><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></label></div>
+          <div class="row"><h3 style="margin:0"><i class="ph ph-sparkle" aria-hidden="true"></i> 教材 AI 助教</h3><label class="ai-provider-label">模型<select id="aiProvider"><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></label></div>
           <p class="muted">會從所有法規與你的教材中找出最相關的段落；回答只依據這些教材，並標出來源。</p>
           <textarea id="aiQuestion" placeholder="例如：加壓送水裝置的啟動方式是什麼？"></textarea>
-          <div class="row"><button class="btn small ghost" id="aiVoice">🎙 語音輸入</button><button class="btn small" id="aiAsk">問教材 AI</button></div>
+          <div class="row"><button class="btn small ghost" id="aiVoice"><i class="ph ph-microphone" aria-hidden="true"></i> 語音輸入</button><button class="btn small" id="aiAsk">問教材 AI</button></div>
           <div id="aiAnswer" class="ai-result"></div>
         </aside>` : ""}
       </section>
@@ -830,7 +836,7 @@ function attachSpeechInput(button, target) {
       target.focus();
     };
     recognition.onerror = () => alert("語音辨識沒有成功，請確認麥克風權限後再試一次。");
-    recognition.onend = () => { button.disabled = false; button.textContent = "🎙 語音輸入"; };
+    recognition.onend = () => { button.disabled = false; button.innerHTML = '<i class="ph ph-microphone" aria-hidden="true"></i> 語音輸入'; };
     recognition.start();
   };
 }
@@ -964,7 +970,7 @@ function drawArts() {
         <div class="note-toolbar">
           <span class="muted" style="font-size:12px">選取文字後點顏色可上色：</span>
           ${NOTE_COLORS.map(c => `<button class="color-dot" data-color="${c.v}" style="background:${c.v}" title="${c.n}"></button>`).join("")}
-          <button class="btn small ghost" data-voice-note>🎙 語音輸入</button>
+          <button class="btn small ghost" data-voice-note><i class="ph ph-microphone" aria-hidden="true"></i> 語音輸入</button>
         </div>
         <div class="note-area" contenteditable="true" data-ph="用自己的話解釋這一條，儲存後會取代原文顯示（原文收合可展開對照）"></div>
         <div class="row">
@@ -1038,7 +1044,7 @@ function renderCalendar() {
   view.innerHTML = `
     <div class="card">
       <div class="row" style="justify-content:space-between">
-        <h2 style="margin:0">📅 讀書日曆</h2>
+        <h2 style="margin:0"><i class="ph ph-calendar-dots" aria-hidden="true"></i> 讀書日曆</h2>
         <div class="row">
           <button class="btn ghost small" id="calPrev">‹</button>
           <b>${y} 年 ${m + 1} 月</b>
@@ -1164,18 +1170,18 @@ function renderPlan() {
       <h2>雲端同步與資料備份</h2>
       <div class="row">
         ${localStorage.getItem("fireExamSyncCode") ? `
-          <span class="tag blue">☁ 雲端同步已啟用</span>
+          <span class="tag blue"><i class="ph ph-cloud-check" aria-hidden="true"></i> 雲端同步已啟用</span>
           <span class="muted" id="syncStatus"></span>
           <button class="btn small" id="syncNow">立即同步</button>
           <button class="btn ghost small" id="syncOff">停用同步</button>`
         : `
           <input type="text" id="syncCode" placeholder="自訂一組同步碼（至少 6 個字）" style="width:230px">
-          <button class="btn small" id="syncOn">☁ 啟用雲端同步</button>`}
+          <button class="btn small" id="syncOn"><i class="ph ph-cloud-arrow-up" aria-hidden="true"></i> 啟用雲端同步</button>`}
       </div>
       <p class="muted">啟用後，紀錄會自動同步到雲端；在其他電腦、手機輸入同一組同步碼即可接續讀書進度。同步碼就是你的鑰匙——自己記住、不要外流，忘記就取不回雲端資料。</p>
       <div class="row" style="margin-top:8px">
-        <button class="btn ghost" id="expData">⬇ 匯出學習資料</button>
-        <button class="btn ghost" id="impData">⬆ 匯入學習資料</button>
+        <button class="btn ghost" id="expData"><i class="ph ph-download-simple" aria-hidden="true"></i> 匯出學習資料</button>
+        <button class="btn ghost" id="impData"><i class="ph ph-upload-simple" aria-hidden="true"></i> 匯入學習資料</button>
         <input type="file" id="impFile" accept=".json" class="hidden">
       </div>
       <p class="muted">匯出／匯入為手動備份，清理瀏覽器資料前建議留一份檔案；匯入會以檔案內容覆蓋目前紀錄。</p>
@@ -1292,7 +1298,7 @@ function updateSyncUI() {
   const el = document.getElementById("syncStatus");
   if (!el) return;
   el.textContent = {
-    off: "", syncing: "☁ 同步中…",
+    off: "", syncing: "同步中…",
     ok: "✓ 已同步" + (syncLastAt ? `（${new Date(syncLastAt).toLocaleTimeString()}）` : ""),
     error: "⚠ 同步失敗，下次修改時自動重試",
   }[syncState];
@@ -1333,7 +1339,7 @@ function popQuiz(fixedQ, variant = true) {
   if (!q) return;
   modal.innerHTML = `
     <div class="modal-box">
-      <div class="title">⏰ 讀書提醒：來一題考古題！</div>
+      <div class="title"><i class="ph ph-alarm" aria-hidden="true"></i> 讀書提醒：來一題考古題！</div>
       <div id="mQ" class="q-card"></div>
       <div class="q-nav">
         <button class="btn ghost" id="mClose">關閉</button>
