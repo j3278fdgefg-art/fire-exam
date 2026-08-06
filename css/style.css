@@ -151,6 +151,11 @@ button.btn:disabled { opacity: .45; cursor: default; transform: none; box-shadow
 }
 .law-side button:hover { background: var(--surface-low); }
 .law-side button.active { background: var(--ok-soft); color: var(--on-ok-soft); font-weight: 700; }
+.law-side .law-add { margin-top: 10px; border: 1px dashed var(--primary-light); color: var(--primary); font-weight: 700; }
+.custom-delete { color: var(--bad); }
+.custom-law-form { display: grid; gap: 12px; }
+.custom-law-form label { display: grid; gap: 5px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.custom-law-form textarea { min-height: 180px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); resize: vertical; font: inherit; line-height: 1.7; }
 @media (max-width: 900px) {
   .law-layout { grid-template-columns: 1fr; }
   .law-side { position: static; display: flex; flex-wrap: wrap; gap: 4px; }
@@ -210,6 +215,11 @@ a.art-no:hover { text-decoration: underline; }
   border-radius: var(--radius-sm); background: #fff; font-size: 14px; line-height: 1.7;
 }
 .note-area:empty::before { content: attr(data-ph); color: var(--muted); }
+
+.ai-tutor { margin-top: 20px; }
+.ai-tutor textarea { width: 100%; min-height: 82px; margin: 12px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; line-height: 1.7; resize: vertical; }
+.ai-result { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); line-height: 1.8; }
+.ai-sources { margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 
 /* 日曆 */
 .cal-week {

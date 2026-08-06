@@ -34,6 +34,7 @@ const DEFAULT_STORE = {
   lawRead: {},  // "lawKey:條號" -> "read" | "skip"
   lawNote: {},  // "lawKey:條號" -> 自己的解釋（顯示時取代原文）
   lawStar: {},  // "lawKey:條號" -> 重要性 1–5 星
+  customLaws: [], // [{key, name, custom: true, articles:[{no, text}]}]
   essay: {},    // essayId -> {note, level}
   schedule: {}, // "YYYY-MM-DD" -> [{s:"19:00", e:"21:00", t:"做什麼"}]
   daily: {},    // "YYYY-MM-DD" -> 作答題數
@@ -690,9 +691,13 @@ function startWrongReview(list) {
 // ===== 法規閱讀 =====
 let curLaw = null;
 let lawFilter = "all";
+let customLawEditor = null;
+let customArticleEdit = null;
+function allLaws() { return [...LAWS.laws, ...(store.customLaws || [])]; }
+function currentLaw() { return allLaws().find(l => l.key === curLaw); }
 function renderLaws() {
-  curLaw = curLaw || LAWS.laws[0].key;
-  const law = LAWS.laws.find(l => l.key === curLaw);
+  curLaw = curLaw || allLaws()[0].key;
+  const law = currentLaw() || allLaws()[0];
   const readCnt = law.articles.filter(a => store.lawRead[law.key + ":" + a.no] === "read").length;
   const skipCnt = law.articles.filter(a => store.lawRead[law.key + ":" + a.no] === "skip").length;
   const filters = [["all", "全部條文"], ["unread", "未讀"], ["skip", "先跳過"], ["read", "已讀"]];
@@ -700,17 +705,18 @@ function renderLaws() {
     <div class="law-layout">
       <aside class="law-side">
         <div class="side-title">法規分類</div>
-        ${LAWS.laws.map(l =>
+        ${allLaws().map(l =>
           `<button class="${l.key === curLaw ? "active" : ""}" data-law="${l.key}">${esc(l.name)}</button>`).join("")}
+        <button class="law-add" id="addCustomLaw" type="button">＋ 新增我的分類</button>
       </aside>
       <section>
         <div class="card">
           <div class="row">
             <h2 style="margin:0">${esc(law.name)}</h2>
-            <a class="law-src" href="https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${law.pcode}" target="_blank">🔗 法規資料庫全文</a>
+            ${law.custom ? `<span class="tag blue">我的教材</span><button class="btn small" id="addCustomArticle">＋ 新增內容</button><button class="btn ghost small" id="deleteCustomLaw">刪除分類</button>` : `<a class="law-src" href="https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${law.pcode}" target="_blank">🔗 法規資料庫全文</a>`}
             <div class="read-progress">
               <span class="muted">閱讀進度 ${readCnt} / ${law.articles.length} 條${skipCnt ? `｜跳過 ${skipCnt}` : ""}</span>
-              <div class="bar-wrap"><div class="bar ok" style="width:${Math.round(readCnt / law.articles.length * 100)}%"></div></div>
+              <div class="bar-wrap"><div class="bar ok" style="width:${Math.round(readCnt / Math.max(law.articles.length, 1) * 100)}%"></div></div>
             </div>
           </div>
           <div class="row" style="margin-top:12px">
@@ -718,13 +724,54 @@ function renderLaws() {
               `<button class="${lawFilter === v ? "active" : ""}" data-f="${v}">${t}</button>`).join("")}</div>
             <input type="text" id="lSearch" placeholder="搜尋條文關鍵字…" style="width:180px; margin-left:auto">
           </div>
-          <p class="muted" style="margin-top:10px">圖示：✎ 寫解釋（儲存後取代原文顯示，原文收合可展開）｜✓ 已讀完（相關考古題進入定時彈題池）｜⚠ 不懂，先跳過。點條號旁星星標記重要性（1–5 星），點條號可開啟全國法規資料庫該條原文。</p>
+          <p class="muted" style="margin-top:10px">${law.custom ? "可直接新增你的教材標題與內容；每一段同樣可標記、加星或寫筆記。" : "圖示：✎ 寫解釋（儲存後取代原文顯示，原文收合可展開）｜✓ 已讀完（相關考古題進入定時彈題池）｜⚠ 不懂，先跳過。點條號旁星星標記重要性（1–5 星），點條號可開啟全國法規資料庫該條原文。"}</p>
         </div>
+        ${customLawEditor ? `<div class="card custom-law-form">
+          <h3>${customLawEditor === "category" ? "新增我的分類" : "新增教材內容"}</h3>
+          ${customLawEditor === "category" ? `<label>分類名稱<input id="customLawName" type="text" placeholder="例如：水系統重點整理"></label>` : `<label>段落標題<input id="customArticleTitle" type="text" placeholder="例如：加壓送水裝置" value="${customArticleEdit === null ? "" : esc(law.articles[customArticleEdit].no)}"></label><label>內容<textarea id="customArticleText" placeholder="直接貼上或輸入你的教材內容">${customArticleEdit === null ? "" : esc(law.articles[customArticleEdit].text)}</textarea></label>`}
+          <div class="row">${customLawEditor === "article" ? `<button class="btn ghost small" id="customVoiceInput">🎙 語音輸入</button>` : ""}<button class="btn small" id="saveCustomEntry">儲存</button><button class="btn ghost small" id="cancelCustomEntry">取消</button></div>
+        </div>` : ""}
         <div id="artList"></div>
+        <section class="card ai-tutor">
+          <div class="row"><h3 style="margin:0">✨ 教材 AI 助教</h3><select id="aiProvider"><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></div>
+          <p class="muted">會從所有法規與你的教材中找出最相關的段落；回答只依據這些教材，並標出來源。</p>
+          <textarea id="aiQuestion" placeholder="例如：加壓送水裝置的啟動方式是什麼？"></textarea>
+          <div class="row"><button class="btn small ghost" id="aiVoice">🎙 語音輸入</button><button class="btn small" id="aiAsk">問教材 AI</button></div>
+          <div id="aiAnswer" class="ai-result"></div>
+        </section>
       </section>
     </div>`;
   document.querySelectorAll("[data-law]").forEach(b =>
-    b.onclick = () => { curLaw = b.dataset.law; renderLaws(); });
+    b.onclick = () => { curLaw = b.dataset.law; customLawEditor = null; customArticleEdit = null; renderLaws(); });
+  document.getElementById("addCustomLaw").onclick = () => { customLawEditor = "category"; renderLaws(); };
+  const addArticle = document.getElementById("addCustomArticle");
+  if (addArticle) addArticle.onclick = () => { customLawEditor = "article"; customArticleEdit = null; renderLaws(); };
+  const deleteLaw = document.getElementById("deleteCustomLaw");
+  if (deleteLaw) deleteLaw.onclick = () => {
+    if (!confirm(`刪除「${law.name}」及其中所有內容？`)) return;
+    store.customLaws = store.customLaws.filter(item => item.key !== law.key);
+    curLaw = LAWS.laws[0].key; save(); renderLaws();
+  };
+  const cancelCustom = document.getElementById("cancelCustomEntry");
+  if (cancelCustom) cancelCustom.onclick = () => { customLawEditor = null; customArticleEdit = null; renderLaws(); };
+  const saveCustom = document.getElementById("saveCustomEntry");
+  const customVoice = document.getElementById("customVoiceInput");
+  if (customVoice) attachSpeechInput(customVoice, document.getElementById("customArticleText"));
+  if (saveCustom) saveCustom.onclick = () => {
+    if (customLawEditor === "category") {
+      const name = document.getElementById("customLawName").value.trim();
+      if (!name) return alert("請輸入分類名稱。");
+      const item = { key: `custom-${Date.now()}`, name, custom: true, articles: [] };
+      store.customLaws.push(item); curLaw = item.key;
+    } else {
+      const no = document.getElementById("customArticleTitle").value.trim();
+      const text = document.getElementById("customArticleText").value.trim();
+      if (!no || !text) return alert("請填寫段落標題與內容。");
+      if (customArticleEdit === null) law.articles.push({ no, text });
+      else law.articles[customArticleEdit] = { ...law.articles[customArticleEdit], no, text };
+    }
+    customLawEditor = null; customArticleEdit = null; save(); renderLaws();
+  };
   const chips = [...document.querySelectorAll("[data-f]")];
   chips.forEach(b => b.onclick = () => {
     lawFilter = b.dataset.f;
@@ -733,16 +780,83 @@ function renderLaws() {
   });
   document.getElementById("lSearch").oninput = debounce(drawArts, 300);
   drawArts();
+  wireAiTutor();
 }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+function attachSpeechInput(button, target) {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition) {
+    button.disabled = true;
+    button.title = "此瀏覽器不支援語音輸入，請使用 Chrome 或 Edge";
+    return;
+  }
+  button.onclick = () => {
+    const recognition = new Recognition();
+    recognition.lang = "zh-TW";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    const original = "value" in target ? target.value : target.innerText;
+    button.disabled = true;
+    button.textContent = "正在聽…";
+    recognition.onresult = event => {
+      const spoken = [...event.results].map(result => result[0].transcript).join("").trim();
+      const text = [original.trim(), spoken].filter(Boolean).join(original.trim() ? "\n" : "");
+      if ("value" in target) target.value = text;
+      else target.textContent = text;
+      target.focus();
+    };
+    recognition.onerror = () => alert("語音辨識沒有成功，請確認麥克風權限後再試一次。");
+    recognition.onend = () => { button.disabled = false; button.textContent = "🎙 語音輸入"; };
+    recognition.start();
+  };
+}
+function studySources(question) {
+  const words = question.toLowerCase().match(/[\u4e00-\u9fff]{2,}|[a-z0-9]+/g) || [];
+  const items = [
+    ...allLaws().flatMap(law => law.articles.map(a => ({
+    label: `${law.name}｜${a.no}`,
+    text: `${a.text}\n${store.lawNote[`${law.key}:${a.no}`]?.replace(/<[^>]+>/g, "") || ""}`.trim(),
+    current: law.key === curLaw,
+    }))),
+    ...BANK.questions.map(q => ({
+      label: `考古題｜${q.year}年${q.cls} ${q.subject} 第${q.no}題`,
+      text: `${q.stem || q.text || ""}\n${q.choices ? `選項：${q.choices.join("／")}\n答案：${q.answer || ""}` : ""}`.trim(),
+      current: false,
+    })),
+  ];
+  return items.map(item => ({ ...item, score: (item.current ? 2 : 0) + words.reduce((n, word) => n + (item.text.toLowerCase().includes(word) ? 1 : 0), 0) }))
+    .sort((a, b) => b.score - a.score).slice(0, 10).map(({ label, text }) => ({ label, text }));
+}
+function wireAiTutor() {
+  const ask = document.getElementById("aiAsk");
+  if (!ask) return;
+  const input = document.getElementById("aiQuestion");
+  attachSpeechInput(document.getElementById("aiVoice"), input);
+  ask.onclick = async () => {
+    const question = input.value.trim();
+    if (!question) return input.focus();
+    const result = document.getElementById("aiAnswer");
+    const sources = studySources(question);
+    ask.disabled = true;
+    result.innerHTML = `<span class="muted">正在閱讀 ${sources.length} 段相關教材…</span>`;
+    try {
+      const r = await fetch("/api/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: document.getElementById("aiProvider").value, question, sources }) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "AI 暫時無法回答");
+      result.innerHTML = `<div class="ai-answer">${esc(data.answer).replace(/\n/g, "<br>")}</div><div class="ai-sources">參考教材：${sources.map((s, i) => `[${i + 1}] ${esc(s.label)}`).join("　")}</div>`;
+    } catch (e) {
+      result.innerHTML = `<span class="muted">${esc(e.message)}</span>`;
+    } finally { ask.disabled = false; }
+  };
+}
 function drawArts() {
-  const law = LAWS.laws.find(l => l.key === curLaw);
+  const law = currentLaw();
   const filter = lawFilter;
   const kw = document.getElementById("lSearch").value.trim();
   const cls = store.settings.cls;
   const frag = [];
   let lastCh = null;
-  for (const a of law.articles) {
+  for (const [articleIndex, a] of law.articles.entries()) {
     const stateKey = law.key + ":" + a.no;
     const st = store.lawRead[stateKey] || "";
     if (filter === "unread" && st) continue;
@@ -761,7 +875,7 @@ function drawArts() {
     frag.push(`
       <div class="art-card ${st}" id="art-${esc(a.no)}">
         <div class="art-head">
-          <a class="art-no" href="https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=${law.pcode}&flno=${esc(a.no)}" target="_blank" title="開啟全國法規資料庫原文">第 ${esc(a.no)} 條</a>
+          ${law.custom ? `<span class="art-no">${esc(a.no)}</span>` : `<a class="art-no" href="https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=${law.pcode}&flno=${esc(a.no)}" target="_blank" title="開啟全國法規資料庫原文">第 ${esc(a.no)} 條</a>`}
           <span class="stars" data-star="${stateKey}" title="標記重要性">${[1, 2, 3, 4, 5].map(n =>
             `<span class="star ${n <= (store.lawStar[stateKey] || 0) ? "on" : ""}" data-n="${n}">★</span>`).join("")}</span>
           ${relShow.length ? `<button class="chk" data-rel="${stateKey}">📌 考古題 ${relShow.length}</button>` : ""}
@@ -769,6 +883,8 @@ function drawArts() {
             <button class="chk icon ${note ? "on-note" : ""}" data-note="${stateKey}" title="${note ? "改解釋" : "寫解釋"}">✎</button>
             <button class="chk icon ${st === "read" ? "on-read" : ""}" data-mark="read" data-key="${stateKey}" title="已讀完">✓</button>
             <button class="chk icon ${st === "skip" ? "on-skip" : ""}" data-mark="skip" data-key="${stateKey}" title="不懂，先跳過">⚠</button>
+            ${law.custom ? `<button class="chk icon" data-custom-edit="${articleIndex}" title="更新這段教材">↻</button>` : ""}
+            ${law.custom ? `<button class="chk icon custom-delete" data-custom-delete="${articleIndex}" title="刪除這段教材">🗑</button>` : ""}
           </div>
         </div>
         ${note ? `
@@ -788,6 +904,21 @@ function drawArts() {
       if (!store.lawRead[k]) delete store.lawRead[k];
       save(); renderLaws();
     };
+  });
+  box.querySelectorAll("[data-custom-delete]").forEach(button => button.onclick = () => {
+    const index = +button.dataset.customDelete;
+    const article = law.articles[index];
+    if (!article || !confirm(`刪除「${article.no}」這段教材？`)) return;
+    law.articles.splice(index, 1);
+    delete store.lawRead[`${law.key}:${article.no}`];
+    delete store.lawNote[`${law.key}:${article.no}`];
+    delete store.lawStar[`${law.key}:${article.no}`];
+    save(); renderLaws();
+  });
+  box.querySelectorAll("[data-custom-edit]").forEach(button => button.onclick = () => {
+    customArticleEdit = +button.dataset.customEdit;
+    customLawEditor = "article";
+    renderLaws();
   });
   box.querySelectorAll("[data-star]").forEach(el => {
     el.onclick = ev => {
@@ -809,6 +940,7 @@ function drawArts() {
         <div class="note-toolbar">
           <span class="muted" style="font-size:12px">選取文字後點顏色可上色：</span>
           ${NOTE_COLORS.map(c => `<button class="color-dot" data-color="${c.v}" style="background:${c.v}" title="${c.n}"></button>`).join("")}
+          <button class="btn small ghost" data-voice-note>🎙 語音輸入</button>
         </div>
         <div class="note-area" contenteditable="true" data-ph="用自己的話解釋這一條，儲存後會取代原文顯示（原文收合可展開對照）"></div>
         <div class="row">
@@ -818,6 +950,7 @@ function drawArts() {
         </div>`;
       const ed = nb.querySelector(".note-area");
       ed.innerHTML = sanitizeNote(store.lawNote[k] || "");
+      attachSpeechInput(nb.querySelector("[data-voice-note]"), ed);
       ed.focus();
       nb.querySelectorAll("[data-color]").forEach(cb => {
         cb.onmousedown = ev => ev.preventDefault();  // 按顏色鈕時保留編輯區的選取範圍
@@ -1089,7 +1222,7 @@ async function pullCloud() {
     const cloud = await r.json();
     // 防呆：空資料不得蓋掉有紀錄的一方，不論時間戳
     const hasData = s => !!(Object.keys(s.rec || {}).length || Object.keys(s.lawNote || {}).length
-      || Object.keys(s.lawRead || {}).length || Object.keys(s.schedule || {}).length);
+      || Object.keys(s.lawRead || {}).length || Object.keys(s.schedule || {}).length || (s.customLaws || []).length);
     const localEmpty = !hasData(store);
     if (!hasData(cloud) && !localEmpty) { await pushCloud(); return; }
     if (localEmpty || (cloud._ts || 0) > (store._ts || 0)) {
