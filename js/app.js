@@ -709,7 +709,8 @@ function renderLaws() {
           `<button class="${l.key === curLaw ? "active" : ""}" data-law="${l.key}">${esc(l.name)}</button>`).join("")}
         <button class="law-add" id="addCustomLaw" type="button">＋ 新增我的分類</button>
       </aside>
-      <section>
+      <section class="law-content">
+        <div class="law-reading">
         <div class="card">
           <div class="row">
             <h2 style="margin:0">${esc(law.name)}</h2>
@@ -732,13 +733,14 @@ function renderLaws() {
           <div class="row">${customLawEditor === "article" ? `<button class="btn ghost small" id="customVoiceInput">🎙 語音輸入</button>` : ""}<button class="btn small" id="saveCustomEntry">儲存</button><button class="btn ghost small" id="cancelCustomEntry">取消</button></div>
         </div>` : ""}
         <div id="artList"></div>
-        <section class="card ai-tutor">
-          <div class="row"><h3 style="margin:0">✨ 教材 AI 助教</h3><select id="aiProvider"><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></div>
+        </div>
+        <aside class="card ai-tutor">
+          <div class="row"><h3 style="margin:0">✨ 教材 AI 助教</h3><label class="ai-provider-label">模型<select id="aiProvider"><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></label></div>
           <p class="muted">會從所有法規與你的教材中找出最相關的段落；回答只依據這些教材，並標出來源。</p>
           <textarea id="aiQuestion" placeholder="例如：加壓送水裝置的啟動方式是什麼？"></textarea>
           <div class="row"><button class="btn small ghost" id="aiVoice">🎙 語音輸入</button><button class="btn small" id="aiAsk">問教材 AI</button></div>
           <div id="aiAnswer" class="ai-result"></div>
-        </section>
+        </aside>
       </section>
     </div>`;
   document.querySelectorAll("[data-law]").forEach(b =>

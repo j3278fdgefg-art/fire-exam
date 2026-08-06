@@ -139,6 +139,7 @@ button.btn:disabled { opacity: .45; cursor: default; transform: none; box-shadow
 
 /* 法規閱讀：側欄版型 */
 .law-layout { display: grid; grid-template-columns: 240px 1fr; gap: 20px; align-items: start; }
+.law-content { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; align-items: start; }
 .law-side {
   position: sticky; top: 76px; background: var(--card); border-radius: var(--radius);
   box-shadow: var(--shadow); padding: 14px 12px;
@@ -156,6 +157,10 @@ button.btn:disabled { opacity: .45; cursor: default; transform: none; box-shadow
 .custom-law-form { display: grid; gap: 12px; }
 .custom-law-form label { display: grid; gap: 5px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .custom-law-form textarea { min-height: 180px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); resize: vertical; font: inherit; line-height: 1.7; }
+@media (max-width: 1200px) {
+  .law-content { grid-template-columns: 1fr; }
+  .ai-tutor { position: static; order: -1; }
+}
 @media (max-width: 900px) {
   .law-layout { grid-template-columns: 1fr; }
   .law-side { position: static; display: flex; flex-wrap: wrap; gap: 4px; }
@@ -216,7 +221,9 @@ a.art-no:hover { text-decoration: underline; }
 }
 .note-area:empty::before { content: attr(data-ph); color: var(--muted); }
 
-.ai-tutor { margin-top: 20px; }
+.ai-tutor { margin: 0; position: sticky; top: 76px; }
+.ai-provider-label { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 600; }
+.ai-provider-label select { padding: 5px 8px; }
 .ai-tutor textarea { width: 100%; min-height: 82px; margin: 12px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; line-height: 1.7; resize: vertical; }
 .ai-result { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); line-height: 1.8; }
 .ai-sources { margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.6; }
