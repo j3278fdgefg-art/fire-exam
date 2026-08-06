@@ -211,27 +211,9 @@ const view = document.getElementById("view");
 let currentView = "home";
 function applyStitchShell(kind) {
   const content = view.innerHTML;
-  const readCount = Object.values(store.lawRead).filter(v => v === "read").length;
-  const articleCount = allLaws().reduce((sum, law) => sum + law.articles.length, 0);
-  const planTabs = ["本週目標", "教材進度", "待完成任務", "歷史紀錄", "新進度"];
-  const lawTabs = allLaws().slice(0, 4);
-  const index = kind === "plan"
-    ? planTabs.map((name, i) => `<span class="stitch-tab ${i === 0 ? "active" : ""}">${name}</span>`).join("")
-    : `${lawTabs.map((law, i) => `<button type="button" class="stitch-tab ${i === 0 ? "active" : ""}" data-stitch-law="${law.key}">${esc(law.name)}</button>`).join("")}<button type="button" class="stitch-tab stitch-add" data-view-laws>新增我的分類</button>`;
   view.innerHTML = `<div class="stitch-shell stitch-${kind}">
-    <aside class="stitch-index"><h2>${kind === "plan" ? "讀書計畫" : "法規分類"}</h2>
-      ${kind === "plan" ? "" : `<p class="stitch-progress">進度：${readCount}/${articleCount} 條</p><button type="button" class="stitch-search" data-view-search><i class="ph ph-magnifying-glass" aria-hidden="true"></i><span>搜尋條文關鍵字...</span></button>`}
-      ${index}</aside>
     <section class="stitch-paper">${content}</section>
   </div>`;
-  view.querySelectorAll("[data-stitch-law]").forEach(button => button.onclick = () => {
-    curLaw = button.dataset.stitchLaw;
-    switchView("laws");
-  });
-  const add = view.querySelector("[data-view-laws]");
-  if (add) add.onclick = () => { switchView("laws"); document.getElementById("addCustomLaw")?.click(); };
-  const search = view.querySelector("[data-view-search]");
-  if (search) search.onclick = () => { switchView("laws"); document.getElementById("lSearch")?.focus(); };
 }
 function switchView(name) {
   currentView = name;
