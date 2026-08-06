@@ -3,31 +3,32 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>消防設備師士考試教育系統</title>
+<title>消防設備士備考室</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap">
+<script src="https://unpkg.com/@phosphor-icons/web"></script>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <header>
-  <div class="brand">🚒 消防考試教育系統</div>
-  <div class="cls-switch">
+  <div class="brand"><i class="ph ph-fire-simple brand-mark" aria-hidden="true"></i> 消防設備士備考室</div>
+  <div class="cls-switch" aria-label="考試類別">
     <button id="clsShi" class="cls-btn">設備士</button>
     <button id="clsMaster" class="cls-btn">設備師</button>
   </div>
-  <nav id="nav">
-    <button data-view="home" class="active">總覽</button>
-    <button data-view="quiz">題庫測驗</button>
-    <button data-view="laws">法規閱讀</button>
-    <button data-view="calendar">日曆</button>
-    <button data-view="plan">讀書計畫</button>
+  <nav id="nav" aria-label="主要導覽">
+    <button data-view="home" class="active"><i class="ph ph-house" aria-hidden="true"></i>總覽</button>
+    <button data-view="quiz"><i class="ph ph-check-square" aria-hidden="true"></i>題庫測驗</button>
+    <button data-view="laws"><i class="ph ph-book-open-text" aria-hidden="true"></i>法規閱讀</button>
+    <button data-view="calendar"><i class="ph ph-calendar-dots" aria-hidden="true"></i>日曆</button>
+    <button data-view="plan"><i class="ph ph-target" aria-hidden="true"></i>讀書計畫</button>
   </nav>
 </header>
 <main id="view"></main>
 <div id="quizModal" class="modal hidden"></div>
 <script src="data/bank.js"></script>
 <script src="data/laws.js"></script>
-<script src="js/app.js?v=custom-library-10"></script>
+<script src="js/app.js?v=stitch-notebook-1"></script>
 </body>
 </html>
