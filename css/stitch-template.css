@@ -2,6 +2,8 @@
 :root {
   --st-canvas:#f4f1e9;
   --st-paper:#fffefa;
+  --st-blue:#7899a2;
+  --st-wood:#ead6b5;
   --st-ink:#202a32;
   --st-muted:#647078;
   --st-sidebar:#dcd9da;
@@ -73,10 +75,24 @@ nav button {
 }
 nav button i { margin-right:6px; font-size:18px; vertical-align:-.12em; }
 nav button:hover { background:#fff9ed; color:#2d241d; }
-nav button.active { color:#2d241d; background:var(--st-paper); box-shadow:inset 0 0 0 1px rgba(255,255,255,.7); }
-nav button::after { display:none!important; }
+nav button.active { z-index:2; color:#2d241d; background:var(--st-paper); box-shadow:inset 0 0 0 1px rgba(255,255,255,.7); }
+nav button::after { content:none; }
+nav button.active::after {
+  content:"";
+  position:absolute;
+  top:auto;
+  left:-1px;
+  right:-1px;
+  bottom:-15px;
+  width:auto;
+  height:16px;
+  border-inline:1px solid #a58d70;
+  border-block:0;
+  border-radius:0;
+  background:var(--st-paper);
+}
 
-main { max-width:1440px; padding:40px clamp(16px,4vw,64px) 90px; }
+main { max-width:1440px; padding:0 clamp(16px,4vw,64px) 90px; }
 :where(button,a,input,select,textarea,[contenteditable="true"]):focus-visible {
   outline:3px solid rgba(190,79,59,.28);
   outline-offset:2px;
@@ -104,8 +120,8 @@ button { touch-action:manipulation; }
   max-width:1320px;
   min-height:760px;
   margin-inline:auto;
-  border:1px solid rgba(116,119,123,.22);
-  border-radius:10px;
+  border:7px solid var(--st-blue);
+  border-radius:14px;
   background:var(--st-paper);
   box-shadow:var(--st-shadow);
   overflow:hidden;
@@ -129,6 +145,7 @@ button { touch-action:manipulation; }
   background:repeating-linear-gradient(to bottom,transparent 0 27px,#7c7d7a 28px 33px,#c8c7c2 34px 37px,transparent 38px 66px);
   filter:drop-shadow(1px 1px 1px rgba(32,42,50,.22));
 }
+.stitch-plan .stitch-index::after { display:none; }
 .stitch-index h2 {
   margin:0 22px 2px 0;
   padding:0;
@@ -264,8 +281,33 @@ button.btn.ghost { background:transparent; color:var(--st-ink); border-color:var
 .stitch-calendar #calDetail { min-width:0; }
 
 /* 讀書計畫：新版改為單一紙張，不再使用舊式中央裝訂圈。 */
-.stitch-plan { grid-template-columns:240px minmax(0,1fr); }
+.stitch-plan {
+  display:grid;
+  grid-template-columns:220px minmax(0,1fr);
+  border:0;
+  overflow:visible;
+  background:
+    repeating-linear-gradient(0deg,rgba(102,72,38,.07) 0 1px,transparent 1px 5px),
+    var(--st-wood);
+  box-shadow:none;
+}
+.stitch-plan .stitch-index {
+  padding:38px 18px 36px;
+  border:1px solid #a58d70;
+  border-right:0;
+  border-radius:14px 0 0 14px;
+  background:transparent;
+}
+.stitch-plan .stitch-tab {
+  width:100%;
+  padding:10px 16px;
+  border:1px solid #ad9270;
+  border-radius:9px;
+  background:rgba(255,249,236,.74);
+}
+.stitch-plan .stitch-tab.active { background:var(--st-peach); }
 .stitch-plan .stitch-paper { display:grid; grid-template-columns:1fr 1fr; align-content:start; gap:20px; padding:42px; }
+.stitch-plan .stitch-paper { border:7px solid var(--st-blue); border-radius:14px; box-shadow:var(--st-shadow); }
 .stitch-plan .stitch-paper > .card,.stitch-plan .stitch-paper > .stat-row { margin:0; }
 .stitch-plan .stitch-paper > .card:first-child { grid-column:1; }
 .stitch-plan .stat-row { grid-column:1; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
@@ -279,20 +321,23 @@ body[data-view="laws"] .law-layout {
   grid-template-columns:280px minmax(0,1fr);
   gap:0;
   min-height:760px;
-  border:1px solid rgba(116,119,123,.22);
-  border-radius:10px;
-  background:var(--st-paper);
-  box-shadow:var(--st-shadow);
-  overflow:hidden;
+  align-items:stretch;
+  border:0;
+  border-radius:14px;
+  background:
+    repeating-linear-gradient(0deg,rgba(102,72,38,.07) 0 1px,transparent 1px 5px),
+    var(--st-wood);
+  box-shadow:none;
+  overflow:visible;
 }
 body[data-view="laws"] .law-side {
   position:relative;
   top:auto;
-  min-height:760px;
+  min-height:100%;
   padding:38px 20px;
   border-radius:0;
   border-right:1px solid var(--st-line);
-  background:var(--st-sidebar);
+  background:transparent;
   box-shadow:none;
 }
 body[data-view="laws"] .law-side::before { display:none; }
@@ -301,7 +346,15 @@ body[data-view="laws"] .law-side button { min-height:54px; margin-bottom:8px; bo
 body[data-view="laws"] .law-side button:hover { background:#f1eeee; }
 body[data-view="laws"] .law-side button.active { background:var(--st-peach); color:var(--st-ink); box-shadow:inset 4px 0 var(--st-vermilion); }
 body[data-view="laws"] .law-side .law-add { border:1px solid var(--st-muted); background:#fbf9f9; }
-body[data-view="laws"] .law-content { display:block; background:var(--st-paper); }
+body[data-view="laws"] .law-content {
+  display:block;
+  min-width:0;
+  border:7px solid var(--st-blue);
+  border-radius:14px;
+  background:var(--st-paper);
+  box-shadow:var(--st-shadow);
+  overflow:hidden;
+}
 body[data-view="laws"] .law-reading { position:relative; padding:46px clamp(28px,5vw,72px) 60px; border:0; border-radius:0; background:transparent; box-shadow:none; }
 body[data-view="laws"] .law-reading::before,body[data-view="laws"] .law-reading::after { display:none; }
 body[data-view="laws"] .law-reading > .card:first-child { padding:24px 26px; }
@@ -327,7 +380,7 @@ body[data-view="laws"] #artList .art-actions .chk { min-width:44px; min-height:4
   .cls-switch { flex-basis:142px; }
   nav { order:3; width:100%; overflow-x:auto; }
   nav button { flex:0 0 auto; }
-  main { padding:18px 12px 72px; }
+  main { padding:0 12px 72px; }
   .stitch-shell,.stitch-calendar,.stitch-plan { display:block; min-height:0; overflow:visible; }
   .stitch-index {
     display:flex;

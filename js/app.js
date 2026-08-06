@@ -211,9 +211,26 @@ const view = document.getElementById("view");
 let currentView = "home";
 function applyStitchShell(kind) {
   const content = view.innerHTML;
+  const planIndex = kind === "plan" ? `<aside class="stitch-index" aria-label="讀書計畫分類">
+    <h2>讀書計畫</h2>
+    ${["本週目標", "教材進度", "待完成任務", "歷史紀錄", "新進度"].map((label, index) =>
+      `<button type="button" class="stitch-tab ${index === 0 ? "active" : ""}" data-plan-section="${index}">${label}</button>`
+    ).join("")}
+  </aside>` : "";
   view.innerHTML = `<div class="stitch-shell stitch-${kind}">
+    ${planIndex}
     <section class="stitch-paper">${content}</section>
   </div>`;
+  if (kind === "plan") {
+    const sections = [...view.querySelector(".stitch-paper").children];
+    view.querySelectorAll("[data-plan-section]").forEach((button, index) => {
+      button.onclick = () => {
+        view.querySelectorAll("[data-plan-section]").forEach(item =>
+          item.classList.toggle("active", item === button));
+        sections[Math.min(index, sections.length - 1)]?.scrollIntoView({ behavior:"smooth", block:"start" });
+      };
+    });
+  }
 }
 function switchView(name) {
   currentView = name;
