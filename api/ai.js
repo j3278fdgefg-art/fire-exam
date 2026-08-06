@@ -1,4 +1,5 @@
 const allowedOrigins = ["https://fire-exam.vercel.app", "http://localhost:8901"];
+const AI_ENABLED = false; // ponytail: keep the implementation dormant until the user wants it back.
 
 function textFromOpenAI(data) {
   return data.output_text || (data.output || []).flatMap(item => item.content || [])
@@ -13,6 +14,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "content-type");
   if (req.method === "OPTIONS") return res.status(204).end();
+  if (!AI_ENABLED) return res.status(503).json({ error: "教材 AI 目前已關閉" });
   if (req.method !== "POST") return res.status(405).json({ error: "method not allowed" });
 
   const { provider, question, sources } = req.body || {};

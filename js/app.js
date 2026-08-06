@@ -42,6 +42,7 @@ const DEFAULT_STORE = {
 let store = loadStore();
 // 雲端同步狀態（宣告須在任何可能觸發 save() 的頂層程式之前，避免 TDZ）
 const SYNC_API = "https://fire-exam.vercel.app/api/sync";
+const AI_ENABLED = false; // ponytail: hide the tutor without deleting the finished feature.
 let syncKeyHash = null;
 let syncPushTimer = null;
 let syncState = "off";   // off | syncing | ok | error
@@ -734,13 +735,13 @@ function renderLaws() {
         </div>` : ""}
         <div id="artList"></div>
         </div>
-        <aside class="card ai-tutor">
+        ${AI_ENABLED ? `<aside class="card ai-tutor">
           <div class="row"><h3 style="margin:0">✨ 教材 AI 助教</h3><label class="ai-provider-label">模型<select id="aiProvider"><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></label></div>
           <p class="muted">會從所有法規與你的教材中找出最相關的段落；回答只依據這些教材，並標出來源。</p>
           <textarea id="aiQuestion" placeholder="例如：加壓送水裝置的啟動方式是什麼？"></textarea>
           <div class="row"><button class="btn small ghost" id="aiVoice">🎙 語音輸入</button><button class="btn small" id="aiAsk">問教材 AI</button></div>
           <div id="aiAnswer" class="ai-result"></div>
-        </aside>
+        </aside>` : ""}
       </section>
     </div>`;
   document.querySelectorAll("[data-law]").forEach(b =>
@@ -782,7 +783,7 @@ function renderLaws() {
   });
   document.getElementById("lSearch").oninput = debounce(drawArts, 300);
   drawArts();
-  wireAiTutor();
+  if (AI_ENABLED) wireAiTutor();
 }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 function attachSpeechInput(button, target) {
