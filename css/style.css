@@ -368,3 +368,20 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .read-progress { padding:8px 0 0; }
 .read-progress .bar-wrap { height:5px; border:0; border-radius:0; background:#ebe6dc; }
 .read-progress .bar { background:var(--primary); border-radius:0; }
+
+/* Screenshot is the source of truth: close the retired AI column and restore
+   the boxed loose-leaf article composition shown by Stitch. */
+.law-layout { max-width:1080px; margin-inline:auto; grid-template-columns:180px minmax(0,1fr); }
+.law-content { grid-template-columns:minmax(0,1fr); }
+.law-reading { width:100%; border-color:#7899a2; padding:24px 30px 32px 42px; overflow:visible; }
+.law-reading::before { content:""; position:absolute; z-index:3; left:-13px; top:38px; bottom:28px; width:28px; pointer-events:none; background:repeating-linear-gradient(to bottom,transparent 0 16px,#6f706d 17px 20px,#b9b7ad 21px 23px,transparent 24px 38px); filter:drop-shadow(1px 1px 1px rgba(40,35,28,.25)); }
+#artList .art-card { max-width:none; margin:0 0 12px; padding:15px 16px 15px 22px; background:#fffdf7; border:1px solid #a89d8c; border-radius:7px; box-shadow:0 2px 4px rgba(63,49,33,.12); }
+#artList .art-card:first-of-type { background:#e8f1f3; border-color:#819ba2; }
+#artList .art-card.read { border-left:5px solid #68858a; padding-left:18px; }
+#artList .art-card.skip { border-left:5px solid #c29549; padding-left:18px; }
+#artList .art-head { align-items:flex-start; }
+#artList .art-actions { margin-left:auto; min-width:142px; justify-content:flex-end; border-left:1px dashed #9e9485; padding-left:12px; }
+#artList .art-actions .chk { background:transparent; border:0; font-size:16px; }
+#artList .art-text,#artList .art-note { max-width:calc(100% - 155px); font-size:15.5px; line-height:1.75; margin-top:4px; }
+#artList > h3 { font-family:"Noto Serif TC",serif; font-size:22px; border-bottom:1px dashed #948979; padding-bottom:7px; }
+@media (max-width:900px) { .law-layout{max-width:none;grid-template-columns:1fr}.law-reading{padding:18px 14px;border-width:4px}.law-reading::before{display:none}#artList .art-actions{min-width:0;border-left:0;padding-left:0}#artList .art-text,#artList .art-note{max-width:none} }
