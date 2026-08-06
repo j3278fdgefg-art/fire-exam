@@ -307,7 +307,7 @@ main { max-width:1320px; padding:28px 18px 90px; }
 .card,.stat,.art-card,.law-side { background:linear-gradient(110deg,rgba(255,255,255,.5),transparent 38%),var(--card); border:1px solid #9ca7a6; border-radius:var(--radius); box-shadow:var(--shadow); }
 .card { padding:20px 24px; }
 .card h2,.card h3 { font-family:"Noto Serif TC",serif; border-bottom:1px dashed #9e907d; padding-bottom:7px; color:#30251c; }
-.stat-row { gap:18px; }
+.stat-row { gap:18px; margin-bottom:28px; }
 .stat { min-width:160px; border-color:#c9bdab; }
 .stat .num { color:var(--primary); font-family:"Noto Serif TC",serif; }
 button.btn { background:var(--primary); border:1px solid #7e3a2d; box-shadow:0 3px 0 #7e3a2d,0 5px 9px rgba(60,34,22,.15); border-radius:7px; }
@@ -315,7 +315,7 @@ button.btn:hover { background:var(--primary-light); transform:translateY(-1px); 
 button.btn.ghost { background:#fffaf0; color:#513326; border-color:#a78c70; box-shadow:0 2px 0 #bcae9b; }
 select,input[type="date"],input[type="number"],input[type="text"],textarea { background:#fffdf7; border-color:#bcae9b; }
 .law-layout { grid-template-columns:180px 1fr; gap:16px; }
-.law-side { top:110px; padding:14px 10px 22px; background:repeating-linear-gradient(0deg,transparent 0 37px,#d8d0c0 38px 39px),#faf7ef; border-color:transparent; border-radius:0; box-shadow:none; }
+.law-side { top:110px; padding:14px 10px 22px; background:#faf7ef; border-color:transparent; border-radius:0; box-shadow:none; }
 .law-side::before { content:""; position:absolute; right:-14px; top:0; bottom:0; width:13px; background:repeating-linear-gradient(0deg,transparent 0 24px,#756f67 25px 29px,transparent 30px 38px); }
 .law-side .side-title { color:#33281d; font-family:"Noto Serif TC",serif; font-size:17px; border-bottom:1px solid #8f8271; margin:0 6px 14px; padding-bottom:6px; }
 .law-side button { margin:0 0 8px; padding:10px 12px; background:#fffdf7; border:1px solid #b9ac99; border-radius:7px; box-shadow:0 2px 0 #b3a694; font-weight:600; }
@@ -358,7 +358,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .art-card.read { border-left:3px solid var(--primary); padding-left:25px; }
 .art-card.skip { border-left:3px solid var(--warn); }
 .art-head { padding-bottom:10px; }
-.art-actions { border-left:1px dotted #b7ab99; padding-left:10px; }
+.art-actions { border-left:0; padding-left:10px; }
 .art-actions .chk { background:transparent; border-color:transparent; box-shadow:none; border-radius:5px; }
 .art-actions .chk:hover { background:var(--accent-soft, var(--primary-soft)); }
 .art-text,.art-note { max-width:680px; font-size:17px; line-height:1.9; color:var(--text); }
@@ -380,8 +380,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 #artList .art-card.read { border-left:5px solid #68858a; padding-left:18px; }
 #artList .art-card.skip { border-left:5px solid #c29549; padding-left:18px; }
 #artList .art-head { align-items:flex-start; }
-#artList .art-actions { margin-left:auto; min-width:142px; justify-content:flex-end; border-left:1px dashed #9e9485; padding-left:12px; }
+#artList .art-actions { margin-left:auto; min-width:142px; justify-content:flex-end; border-left:0; padding-left:12px; }
 #artList .art-actions .chk { background:transparent; border:0; font-size:16px; }
 #artList .art-text,#artList .art-note { max-width:calc(100% - 155px); font-size:15.5px; line-height:1.75; margin-top:4px; }
 #artList > h3 { font-family:"Noto Serif TC",serif; font-size:22px; border-bottom:1px dashed #948979; padding-bottom:7px; }
 @media (max-width:900px) { .law-layout{max-width:none;grid-template-columns:1fr}.law-reading{padding:18px 14px;border-width:4px}.law-reading::before{display:none}#artList .art-actions{min-width:0;border-left:0;padding-left:0}#artList .art-text,#artList .art-note{max-width:none} }
+
+.cal-item.done .cal-txt { color:var(--muted); text-decoration:line-through; text-decoration-thickness:1.5px; }
+.cal-item.done .cal-bar { background:var(--ok); opacity:.55; }
+.cal-done { display:grid; place-items:center; min-width:44px; min-height:44px; cursor:pointer; }
+.cal-done input { width:19px; height:19px; accent-color:var(--ok); cursor:pointer; }
+.cal-imp.done { opacity:.58; text-decoration:line-through; }

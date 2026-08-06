@@ -1010,7 +1010,7 @@ function renderCalendar() {
     const imps = dayList.filter(x => x.imp);
     cells.push(`<button class="cal-day ${k === today() ? "today" : ""} ${k === calSel ? "sel" : ""}" data-day="${k}">
       <span class="d">${d}</span>
-      ${imps.slice(0, 2).map(x => `<span class="cal-imp">⭐${esc(x.t.length > 5 ? x.t.slice(0, 5) + "…" : x.t)}</span>`).join("")}
+      ${imps.slice(0, 2).map(x => `<span class="cal-imp ${x.done ? "done" : ""}">⭐${esc(x.t.length > 5 ? x.t.slice(0, 5) + "…" : x.t)}</span>`).join("")}
       ${dayList.length ? `<span class="cal-n">${dayList.length} 項</span>` : ""}
     </button>`);
   }
@@ -1043,7 +1043,8 @@ function drawCalDetail() {
   box.innerHTML = `
     <h2>${calSel}（週${"日一二三四五六"[new Date(calSel).getDay()]}）</h2>
     ${list.length ? list.map(it => `
-      <div class="cal-item ${it.imp ? "imp" : ""} ${it.oi === calEdit ? "editing" : ""}">
+      <div class="cal-item ${it.imp ? "imp" : ""} ${it.done ? "done" : ""} ${it.oi === calEdit ? "editing" : ""}">
+        <label class="cal-done" title="標記完成"><input type="checkbox" data-done="${it.oi}" ${it.done ? "checked" : ""} aria-label="標記「${esc(it.t)}」完成"></label>
         <span class="cal-time"><span class="ts">${it.s}</span><span class="te">${it.e}</span></span>
         <span class="cal-bar"></span>
         <span class="cal-txt">${it.imp ? "⭐ " : ""}${esc(it.t)}</span>
@@ -1065,6 +1066,10 @@ function drawCalDetail() {
     calEdit = null;
     save(); renderCalendar();
   });
+  box.querySelectorAll("[data-done]").forEach(b => b.onchange = () => {
+    orig[+b.dataset.done].done = b.checked;
+    save(); renderCalendar();
+  });
   box.querySelectorAll("[data-edit]").forEach(b =>
     b.onclick = () => { calEdit = +b.dataset.edit; drawCalDetail(); });
   if (editing) document.getElementById("calCancel").onclick = () => { calEdit = null; drawCalDetail(); };
@@ -1072,7 +1077,7 @@ function drawCalDetail() {
     const s = document.getElementById("calS").value, e = document.getElementById("calE").value,
           t = document.getElementById("calT").value.trim();
     if (!s || !e || !t) return;
-    const entry = { s, e, t };
+    const entry = { s, e, t, done: editing ? !!editing.done : false };
     if (document.getElementById("calImp").checked) entry.imp = true;
     if (calEdit !== null) orig[calEdit] = entry;
     else (store.schedule[calSel] = store.schedule[calSel] || []).push(entry);
