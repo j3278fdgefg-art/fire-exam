@@ -211,10 +211,10 @@ const view = document.getElementById("view");
 let currentView = "home";
 function applyStitchShell(kind) {
   const content = view.innerHTML;
-  const planIndex = kind === "plan" ? `<aside class="stitch-index" aria-label="讀書計畫分類">
+  const planIndex = kind === "plan" ? `<aside class="stitch-index" role="tablist" aria-label="讀書計畫分類">
     <h2>讀書計畫</h2>
     ${["本週目標", "教材進度", "待完成任務", "歷史紀錄", "新進度"].map((label, index) =>
-      `<button type="button" class="stitch-tab ${index === 0 ? "active" : ""}" data-plan-section="${index}">${label}</button>`
+      `<button type="button" id="plan-tab-${index}" role="tab" aria-controls="plan-panel-${index}" aria-selected="false" class="stitch-tab" data-plan-section="${index}">${label}</button>`
     ).join("")}
   </aside>` : "";
   view.innerHTML = `<div class="stitch-shell stitch-${kind}">
@@ -222,14 +222,21 @@ function applyStitchShell(kind) {
     <section class="stitch-paper">${content}</section>
   </div>`;
   if (kind === "plan") {
-    const sections = [...view.querySelector(".stitch-paper").children];
+    const panels = [...view.querySelectorAll("[data-plan-panel]")];
+    const buttons = [...view.querySelectorAll("[data-plan-section]")];
+    const selectPanel = index => {
+      planSection = Math.min(index, panels.length - 1);
+      buttons.forEach((button, buttonIndex) => {
+        const selected = buttonIndex === planSection;
+        button.classList.toggle("active", selected);
+        button.setAttribute("aria-selected", selected);
+      });
+      panels.forEach((panel, panelIndex) => { panel.hidden = panelIndex !== planSection; });
+    };
     view.querySelectorAll("[data-plan-section]").forEach((button, index) => {
-      button.onclick = () => {
-        view.querySelectorAll("[data-plan-section]").forEach(item =>
-          item.classList.toggle("active", item === button));
-        sections[Math.min(index, sections.length - 1)]?.scrollIntoView({ behavior:"smooth", block:"start" });
-      };
+      button.onclick = () => selectPanel(index);
     });
+    selectPanel(planSection);
   }
 }
 function switchView(name) {
@@ -1113,6 +1120,7 @@ function drawCalDetail() {
 }
 
 // ===== 讀書計畫 =====
+let planSection = 0;
 function renderPlan() {
   const s = store.settings;
   const days = examCountdown();
@@ -1137,7 +1145,11 @@ function renderPlan() {
   const doneUnique = Object.keys(store.rec).length;
   const readN = Object.values(store.lawRead).filter(v => v === "read").length;
   const totalArts = LAWS.laws.reduce((n, l) => n + l.articles.length, 0);
+  const pendingTasks = Object.entries(store.schedule || {}).flatMap(([date, items]) =>
+    (Array.isArray(items) ? items : []).filter(item => !item.done).map(item => ({ ...item, date })))
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.s || "").localeCompare(b.s || ""));
   view.innerHTML = `
+    <section id="plan-panel-0" class="plan-panel" role="tabpanel" aria-labelledby="plan-tab-0" data-plan-panel="0">
     <div class="card">
       <h2>讀書計畫</h2>
       <div class="row">
@@ -1146,6 +1158,10 @@ function renderPlan() {
       </div>
       <p class="muted">專技高普考（消防設備人員）每年約 6 月中舉行，請以考選部公告為準。</p>
     </div>
+    </section>
+    <section id="plan-panel-1" class="plan-panel" role="tabpanel" aria-labelledby="plan-tab-1" data-plan-panel="1" hidden>
+    <div class="card">
+      <h2>教材進度</h2>
     <div class="stat-row">
       <div class="stat"><div class="num">${days === null ? "未設定" : days + " 天"}</div><div class="lbl">距離考試</div></div>
       <div class="stat"><div class="num">${todayN} / ${s.dailyTarget}</div><div class="lbl">今日進度（題）</div></div>
@@ -1153,6 +1169,17 @@ function renderPlan() {
       <div class="stat"><div class="num">${doneUnique}</div><div class="lbl">累計做過題數</div></div>
       <div class="stat"><div class="num">${readN}/${totalArts}</div><div class="lbl">已讀條文</div></div>
     </div>
+    </div>
+    </section>
+    <section id="plan-panel-2" class="plan-panel" role="tabpanel" aria-labelledby="plan-tab-2" data-plan-panel="2" hidden>
+    <div class="card">
+      <h2>待完成任務</h2>
+      ${pendingTasks.length ? `<div class="plan-task-list">${pendingTasks.slice(0, 12).map(task => `
+        <div class="plan-task"><span class="muted">${esc(task.date)} ${esc(task.s || "")}</span><strong>${esc(task.t || "未命名安排")}</strong></div>`).join("")}</div>` : `<p class="muted">目前沒有待完成安排，可以到日曆新增。</p>`}
+      <button class="btn ghost" type="button" data-plan-go="calendar"><i class="ph ph-calendar-dots" aria-hidden="true"></i> 前往日曆安排</button>
+    </div>
+    </section>
+    <section id="plan-panel-3" class="plan-panel" role="tabpanel" aria-labelledby="plan-tab-3" data-plan-panel="3" hidden>
     <div class="card">
       <h2>近 7 天練習量</h2>
       <div style="display:flex; gap:10px; align-items:flex-end; height:140px; padding:0 6px">
@@ -1163,6 +1190,17 @@ function renderPlan() {
           </div>`).join("")}
       </div>
       <p class="muted" style="margin-top:8px">綠色代表達成每日目標。</p>
+    </div>
+    </section>
+    <section id="plan-panel-4" class="plan-panel" role="tabpanel" aria-labelledby="plan-tab-4" data-plan-panel="4" hidden>
+    <div class="card">
+      <h2>新增學習進度</h2>
+      <p class="muted">選擇要繼續記錄的學習方式。</p>
+      <div class="row">
+        <button class="btn" type="button" data-plan-go="quiz"><i class="ph ph-check-square" aria-hidden="true"></i> 開始練題</button>
+        <button class="btn ghost" type="button" data-plan-go="laws"><i class="ph ph-book-open-text" aria-hidden="true"></i> 閱讀教材</button>
+        <button class="btn ghost" type="button" data-plan-go="calendar"><i class="ph ph-calendar-plus" aria-hidden="true"></i> 新增安排</button>
+      </div>
     </div>
     <div class="card">
       <h2>雲端同步與資料備份</h2>
@@ -1183,8 +1221,11 @@ function renderPlan() {
         <input type="file" id="impFile" accept=".json" class="hidden">
       </div>
       <p class="muted">匯出／匯入為手動備份，清理瀏覽器資料前建議留一份檔案；匯入會以檔案內容覆蓋目前紀錄。</p>
-    </div>`;
+    </div>
+    </section>`;
   applyStitchShell("plan");
+  document.querySelectorAll("[data-plan-go]").forEach(button =>
+    button.onclick = () => switchView(button.dataset.planGo));
   document.getElementById("planDate").onchange = e => { s.examDate = e.target.value; save(); renderPlan(); };
   document.getElementById("planTarget").onchange = e => {
     s.dailyTarget = Math.max(5, parseInt(e.target.value) || 40); save(); renderPlan();
