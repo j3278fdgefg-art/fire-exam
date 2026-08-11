@@ -256,12 +256,11 @@ document.getElementById("clsMaster").onclick = () => { store.settings.cls = "師
 function subjectStats(cls) {
   return SUBJECTS[cls].map(s => {
     const qs = poolOf(cls, s.key);
-    let a = 0, c = 0, done = 0;
+    let done = 0;
     for (const q of qs) {
-      const r = store.rec[q.id];
-      if (r) { a += r.a; c += r.c; done++; }
+      if (store.rec[q.id]) done++;
     }
-    return { ...s, total: qs.length, done, acc: a ? Math.round(c / a * 100) : null };
+    return { ...s, total: qs.length, done, progress: qs.length ? Math.round(done / qs.length * 100) : 0 };
   });
 }
 function renderHome() {
@@ -278,12 +277,12 @@ function renderHome() {
       <div class="stat"><div class="num">${readN}</div><div class="lbl">已讀完條文</div></div>
     </div>
     <div class="card">
-      <h2>消防設備${cls}．各科掌握度</h2>
+      <h2>消防設備${cls}．各科練習進度</h2>
       ${stats.map(s => `
         <div class="bar-line">
           <span class="name">${esc(s.name)}</span>
-          <div class="bar-wrap"><div class="bar ${s.acc >= 60 ? "ok" : ""}" style="width:${s.acc || 0}%"></div></div>
-          <span class="pct">${s.acc === null ? "尚未練習" : s.acc + "%（" + s.done + "/" + s.total + " 題）"}</span>
+          <div class="bar-wrap"><div class="bar ${s.progress >= 60 ? "ok" : ""}" style="width:${s.progress}%"></div></div>
+          <span class="pct">${s.done ? s.progress + "%（" + s.done + "/" + s.total + " 題）" : "尚未練習"}</span>
         </div>`).join("")}
       ${cls === "師" ? `<p class="muted">設備師除消防法規外為申論題，請至「申論題庫」練習。</p>` : ""}
     </div>
