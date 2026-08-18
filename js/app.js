@@ -39,24 +39,111 @@ const DEFAULT_STORE = {
   schedule: {}, // "YYYY-MM-DD" -> [{s:"19:00", e:"21:00", t:"做什麼"}]
   daily: {},    // "YYYY-MM-DD" -> 作答題數
 };
+const STORE_MAP_FIELDS = ["rec", "wrong", "lawRead", "lawNote", "lawStar", "essay", "schedule", "daily"];
+function cloneJson(value) { return JSON.parse(JSON.stringify(value)); }
+function isRecord(value) { return !!value && typeof value === "object" && !Array.isArray(value); }
+function cleanMap(value, normalizeValue) {
+  const out = {};
+  if (!isRecord(value)) return out;
+  for (const [key, item] of Object.entries(value)) {
+    const normalized = normalizeValue(item, key);
+    if (normalized !== undefined) out[key] = normalized;
+  }
+  return out;
+}
+function normalizeStore(value) {
+  const source = isRecord(value) ? value : {};
+  const normalized = { ...cloneJson(DEFAULT_STORE), ...source };
+  const sourceSettings = isRecord(source.settings) ? source.settings : {};
+  normalized.settings = { ...cloneJson(DEFAULT_STORE.settings), ...sourceSettings };
+  if (!SUBJECTS[normalized.settings.cls]) normalized.settings.cls = DEFAULT_STORE.settings.cls;
+  if (typeof normalized.settings.examDate !== "string") normalized.settings.examDate = DEFAULT_STORE.settings.examDate;
+  if (!Number.isFinite(normalized.settings.dailyTarget) || normalized.settings.dailyTarget < 5 || normalized.settings.dailyTarget > 500)
+    normalized.settings.dailyTarget = DEFAULT_STORE.settings.dailyTarget;
+  if (typeof normalized.settings.quizOn !== "boolean") normalized.settings.quizOn = DEFAULT_STORE.settings.quizOn;
+  if (!Number.isFinite(normalized.settings.quizMin) || normalized.settings.quizMin < 1 || normalized.settings.quizMin > 120)
+    normalized.settings.quizMin = DEFAULT_STORE.settings.quizMin;
+  if (Object.hasOwn(normalized.settings, "noteHtml") && typeof normalized.settings.noteHtml !== "boolean")
+    delete normalized.settings.noteHtml;
+
+  normalized.rec = cleanMap(source.rec, item => {
+    if (!isRecord(item)) return undefined;
+    const a = Math.max(0, Math.trunc(Number(item.a) || 0));
+    const c = Math.min(a, Math.max(0, Math.trunc(Number(item.c) || 0)));
+    const s = Math.max(0, Math.trunc(Number(item.s) || 0));
+    return a ? { a, c, s } : undefined;
+  });
+  normalized.wrong = cleanMap(source.wrong, item => item === true ? true : undefined);
+  normalized.lawRead = cleanMap(source.lawRead, item => ["read", "skip"].includes(item) ? item : undefined);
+  normalized.lawNote = cleanMap(source.lawNote, item => typeof item === "string" && item ? item : undefined);
+  if (normalized.settings.noteHtml !== true) {
+    for (const key in normalized.lawNote)
+      normalized.lawNote[key] = esc(normalized.lawNote[key]).replace(/\n/g, "<br>");
+    normalized.settings.noteHtml = true;
+  }
+  normalized.lawStar = cleanMap(source.lawStar, item => Number.isInteger(item) && item >= 1 && item <= 5 ? item : undefined);
+  normalized.essay = cleanMap(source.essay, item => {
+    if (!isRecord(item)) return undefined;
+    const note = typeof item.note === "string" ? item.note : "";
+    const level = ["ok", "weak"].includes(item.level) ? item.level : "";
+    return note || level ? { note, ...(level ? { level } : {}) } : undefined;
+  });
+  normalized.schedule = cleanMap(source.schedule, items => {
+    if (!Array.isArray(items)) return undefined;
+    const valid = items.filter(isRecord).map(item => ({
+      s: typeof item.s === "string" ? item.s : "",
+      e: typeof item.e === "string" ? item.e : "",
+      t: typeof item.t === "string" ? item.t : "",
+      ...(item.done ? { done: true } : {}),
+      ...(item.imp ? { imp: true } : {}),
+    })).filter(item => item.s && item.e && item.t);
+    return valid.length ? valid : undefined;
+  });
+  normalized.daily = cleanMap(source.daily, item => Number.isFinite(item) && item > 0 ? item : undefined);
+  normalized.customLaws = Array.isArray(source.customLaws) ? source.customLaws.filter(isRecord).map(item => ({
+    key: typeof item.key === "string" ? item.key : "",
+    name: typeof item.name === "string" ? item.name : "",
+    custom: true,
+    articles: Array.isArray(item.articles) ? item.articles.filter(isRecord).map(article => ({
+      ...article,
+      no: typeof article.no === "string" ? article.no : "",
+      text: typeof article.text === "string" ? article.text : "",
+    })).filter(article => article.no && article.text) : [],
+  })).filter(item => item.key && item.name) : [];
+  if (!Number.isFinite(source._ts)) delete normalized._ts;
+  return normalized;
+}
+function hasData(value) {
+  const candidate = normalizeStore(value);
+  return STORE_MAP_FIELDS.some(field => Object.keys(candidate[field]).length) || candidate.customLaws.length > 0;
+}
 let store = loadStore();
 // 雲端同步狀態（宣告須在任何可能觸發 save() 的頂層程式之前，避免 TDZ）
 const SYNC_API = "https://fire-exam.vercel.app/api/sync";
 const AI_ENABLED = false; // ponytail: hide the tutor without deleting the finished feature.
 let syncKeyHash = null;
 let syncPushTimer = null;
+let syncGeneration = 0;
+let syncWriteQueue = Promise.resolve();
 let syncState = "off";   // off | syncing | ok | error
 let syncLastAt = null;
+let essayNoteDirty = false;
 function loadStore() {
   try {
     const raw = localStorage.getItem("fireExam");
-    if (raw) return Object.assign(JSON.parse(JSON.stringify(DEFAULT_STORE)), JSON.parse(raw));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const normalized = normalizeStore(parsed);
+      if (!isRecord(parsed.settings) || parsed.settings.noteHtml !== true)
+        localStorage.setItem("fireExam", JSON.stringify(normalized));
+      return normalized;
+    }
   } catch (e) { /* 壞資料重來 */ }
-  return JSON.parse(JSON.stringify(DEFAULT_STORE));
+  return normalizeStore(null);
 }
 function persist() { localStorage.setItem("fireExam", JSON.stringify(store)); }
 function save() {
-  store._ts = Date.now();   // 雲端同步用：整份資料的最後修改時間（只在使用者操作時蓋）
+  store._ts = Math.max(Date.now(), (store._ts || 0) + 1);   // 同一毫秒連續操作也保持嚴格遞增
   persist();
   pushCloudSoon();
 }
@@ -134,14 +221,6 @@ function sanitizeNote(html) {
   })(tpl.content);
   return tpl.innerHTML;
 }
-// 舊版純文字解釋一次性轉為 HTML（支援上色後改存 HTML）
-// 注意：這是開機整理，用 persist() 不蓋 _ts，否則全新裝置會被誤判成「比雲端新」
-if (!store.settings.noteHtml) {
-  for (const k in store.lawNote) store.lawNote[k] = esc(store.lawNote[k]).replace(/\n/g, "<br>");
-  store.settings.noteHtml = true;
-  persist();
-}
-
 // ===== 作答紀錄 =====
 function recordAnswer(q, correct) {
   const r = store.rec[q.id] || { a: 0, c: 0, s: 0 };
@@ -178,7 +257,7 @@ function renderQuestion(container, q, opts = {}) {
     </div>
     <div class="q-stem">${esc(q.stem)}</div>
     <div class="choices"></div>
-    <div class="feedback"></div>`;
+    <div class="feedback" role="status" aria-live="polite" aria-atomic="true"></div>`;
   const box = container.querySelector(".choices");
   const fb = container.querySelector(".feedback");
   choices.forEach(ch => {
@@ -209,9 +288,21 @@ function canShuffleChoices(q) {
 // ===== 視圖切換 =====
 const view = document.getElementById("view");
 let currentView = "home";
+let hasRenderedView = false;
+let lastAppliedHash = null;
+const planOrientationQuery = window.matchMedia("(max-width: 820px)");
+function updatePlanTabOrientation() {
+  view.querySelector('[role="tablist"]')?.setAttribute("aria-orientation", planOrientationQuery.matches ? "horizontal" : "vertical");
+}
+planOrientationQuery.addEventListener("change", updatePlanTabOrientation);
+function scrollActiveIntoView(element) {
+  if (!element) return;
+  const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  element.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest", inline: "nearest" });
+}
 function applyStitchShell(kind) {
   const content = view.innerHTML;
-  const planIndex = kind === "plan" ? `<aside class="stitch-index" role="tablist" aria-label="讀書計畫分類">
+  const planIndex = kind === "plan" ? `<aside class="stitch-index" role="tablist" aria-label="讀書計畫分類" aria-orientation="${planOrientationQuery.matches ? "horizontal" : "vertical"}">
     <h2>讀書計畫</h2>
     ${["本週目標", "教材進度", "待完成任務", "歷史紀錄", "新進度"].map((label, index) =>
       `<button type="button" id="plan-tab-${index}" role="tab" aria-controls="plan-panel-${index}" aria-selected="false" class="stitch-tab" data-plan-section="${index}">${label}</button>`
@@ -225,36 +316,74 @@ function applyStitchShell(kind) {
     const panels = [...view.querySelectorAll("[data-plan-panel]")];
     const buttons = [...view.querySelectorAll("[data-plan-section]")];
     const selectPanel = index => {
-      planSection = Math.min(index, panels.length - 1);
+      if (!panels.length) return;
+      planSection = Math.max(0, Math.min(index, panels.length - 1));
       buttons.forEach((button, buttonIndex) => {
         const selected = buttonIndex === planSection;
         button.classList.toggle("active", selected);
         button.setAttribute("aria-selected", selected);
+        button.tabIndex = selected ? 0 : -1;
       });
       panels.forEach((panel, panelIndex) => { panel.hidden = panelIndex !== planSection; });
+      scrollActiveIntoView(buttons[planSection]);
     };
-    view.querySelectorAll("[data-plan-section]").forEach((button, index) => {
+    buttons.forEach((button, index) => {
       button.onclick = () => selectPanel(index);
+      button.onkeydown = event => {
+        let next = null;
+        if (["ArrowRight", "ArrowDown"].includes(event.key)) next = (index + 1) % buttons.length;
+        else if (["ArrowLeft", "ArrowUp"].includes(event.key)) next = (index - 1 + buttons.length) % buttons.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = buttons.length - 1;
+        if (next === null) return;
+        event.preventDefault();
+        selectPanel(next);
+        buttons[next].focus();
+      };
     });
     selectPanel(planSection);
   }
 }
-function switchView(name) {
+function switchView(name, updateHash = true) {
+  const render = { home: renderHome, quiz: renderQuiz, laws: renderLaws,
+    calendar: renderCalendar, plan: renderPlan }[name];
+  if (!render) name = "home";
+  if (updateHash && location.hash !== `#${name}`) {
+    history.pushState(null, "", `#${name}`);
+    lastAppliedHash = location.hash;
+  }
   currentView = name;
+  hasRenderedView = true;
   document.body.dataset.view = name;
-  document.querySelectorAll("nav button").forEach(b =>
-    b.classList.toggle("active", b.dataset.view === name));
+  let activeNav = null;
+  document.querySelectorAll("nav button").forEach(button => {
+    const active = button.dataset.view === name;
+    button.classList.toggle("active", active);
+    if (active) {
+      button.setAttribute("aria-current", "page");
+      activeNav = button;
+    } else button.removeAttribute("aria-current");
+  });
   ({ home: renderHome, quiz: renderQuiz, laws: renderLaws,
      calendar: renderCalendar, plan: renderPlan }[name])();
   window.scrollTo(0, 0);
+  requestAnimationFrame(() => scrollActiveIntoView(activeNav));
 }
 document.querySelectorAll("nav button").forEach(b =>
   b.onclick = () => switchView(b.dataset.view));
+document.querySelector(".skip-link").onclick = event => {
+  event.preventDefault();
+  document.getElementById("view").focus();
+};
 
 // 考別切換
 function refreshClsBtns() {
-  document.getElementById("clsShi").classList.toggle("active", store.settings.cls === "士");
-  document.getElementById("clsMaster").classList.toggle("active", store.settings.cls === "師");
+  [["clsShi", "士"], ["clsMaster", "師"]].forEach(([id, cls]) => {
+    const button = document.getElementById(id);
+    const active = store.settings.cls === cls;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active);
+  });
 }
 document.getElementById("clsShi").onclick = () => { store.settings.cls = "士"; save(); refreshClsBtns(); switchView(currentView); };
 document.getElementById("clsMaster").onclick = () => { store.settings.cls = "師"; save(); refreshClsBtns(); switchView(currentView); };
@@ -275,12 +404,14 @@ function renderHome() {
   const stats = subjectStats(cls);
   const days = examCountdown();
   const todayN = store.daily[today()] || 0;
-  const readN = Object.values(store.lawRead).filter(v => v === "read").length;
+  const validArticleKeys = new Set(allLaws().flatMap(law => law.articles.map(article => `${law.key}:${article.no}`)));
+  const readN = Object.entries(store.lawRead).filter(([key, value]) => value === "read" && validArticleKeys.has(key)).length;
+  const wrongN = Object.keys(store.wrong).filter(id => QBY[id]?.cls === cls).length;
   view.innerHTML = `
     <div class="stat-row">
       <div class="stat"><div class="num">${days === null ? "—" : days}</div><div class="lbl">距離考試（天）</div></div>
       <div class="stat"><div class="num">${todayN}</div><div class="lbl">今日已練題數</div></div>
-      <div class="stat"><div class="num">${Object.keys(store.wrong).length}</div><div class="lbl">錯題本待複習</div></div>
+      <div class="stat"><div class="num">${wrongN}</div><div class="lbl">錯題本待複習</div></div>
       <div class="stat"><div class="num">${readN}</div><div class="lbl">已讀完條文</div></div>
     </div>
     <div class="card">
@@ -305,13 +436,22 @@ function renderHome() {
   applyStitchShell("home");
   document.getElementById("quizOn").onchange = e => { store.settings.quizOn = e.target.checked; save(); scheduleQuiz(); };
   document.getElementById("quizMin").onchange = e => {
-    store.settings.quizMin = Math.max(1, parseInt(e.target.value) || 5); save(); scheduleQuiz();
+    store.settings.quizMin = Math.min(120, Math.max(1, parseInt(e.target.value) || 5));
+    e.target.value = store.settings.quizMin;
+    save(); scheduleQuiz();
   };
   document.getElementById("quizNow").onclick = () => popQuiz();
 }
 function examCountdown() {
   if (!store.settings.examDate) return null;
-  const diff = Math.ceil((new Date(store.settings.examDate) - new Date()) / 86400000);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(store.settings.examDate);
+  if (!match) return null;
+  const [, year, month, day] = match.map(Number);
+  const target = new Date(year, month - 1, day);
+  if (target.getFullYear() !== year || target.getMonth() !== month - 1 || target.getDate() !== day) return null;
+  const now = new Date();
+  const diff = Math.round((Date.UTC(year, month - 1, day)
+    - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
   return diff >= 0 ? diff : null;
 }
 
@@ -322,12 +462,13 @@ function renderQuiz() {
   view.innerHTML = `
     <div class="card">
       <div class="filter-chips">${modes.map(([m, icon, title]) =>
-        `<button class="${quizMode === m ? "active" : ""}" data-qm="${m}"><i class="ph ${icon}" aria-hidden="true"></i>${title}</button>`).join("")}</div>
+        `<button class="${quizMode === m ? "active" : ""}" data-qm="${m}" aria-pressed="${quizMode === m}"><i class="ph ${icon}" aria-hidden="true"></i>${title}</button>`).join("")}</div>
     </div>
     <div id="quizBody"></div>`;
   applyStitchShell("quiz");
   document.querySelectorAll("[data-qm]").forEach(b =>
     b.onclick = () => { quizMode = b.dataset.qm; renderQuiz(); });
+  requestAnimationFrame(() => scrollActiveIntoView(document.querySelector(`[data-qm="${quizMode}"]`)));
   ({ practice: renderPractice, exam: renderExam, essay: renderEssay, wrong: renderWrong }[quizMode])();
 }
 // 模擬考計時交卷時若不在本頁，先切回來
@@ -348,9 +489,9 @@ function renderPractice() {
       <h2>題庫練習（消防設備${cls}）</h2>
       ${cls === "師" ? `<p class="muted">設備師僅「消防法規」含測驗題，其他科目請至「申論題庫」。</p>` : ""}
       <div class="row">
-        <select id="pSub">${subs.map(s => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
-        <select id="pYear"><option value="">全部年份</option>${years.map(y => `<option>${y}</option>`).join("")}</select>
-        <select id="pScope">
+        <select id="pSub" aria-label="練習科目">${subs.map(s => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
+        <select id="pYear" aria-label="練習年份"><option value="">全部年份</option>${years.map(y => `<option>${y}</option>`).join("")}</select>
+        <select id="pScope" aria-label="出題範圍">
           <option value="all">全部題目</option>
           <option value="new">只出沒做過的</option>
           <option value="wrong">只出錯過的</option>
@@ -431,12 +572,12 @@ function renderExam() {
     <div class="card">
       <h2>模擬考（消防設備${cls}）</h2>
       <div class="row">
-        <select id="eSub">${subs.map(s => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
-        <select id="eMode">
+        <select id="eSub" aria-label="模擬考科目">${subs.map(s => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
+        <select id="eMode" aria-label="組卷方式">
           <option value="year">歷屆完整卷</option>
           <option value="random">隨機組卷（40 題）</option>
         </select>
-        <select id="eYear">${years.map(y => `<option>${y}</option>`).join("")}</select>
+        <select id="eYear" aria-label="考卷年份">${years.map(y => `<option>${y}</option>`).join("")}</select>
         <label>時間 <input type="number" id="eMin" value="45" min="5" max="120" style="width:60px"> 分鐘</label>
         <button class="btn" id="eStart">開始測驗</button>
       </div>
@@ -456,7 +597,7 @@ function renderExam() {
       qs = shuffle(poolOf(cls, sub)).slice(0, 40);
     }
     if (!qs.length) return;
-    const mins = Math.max(5, parseInt(document.getElementById("eMin").value) || 45);
+    const mins = Math.min(120, Math.max(5, parseInt(document.getElementById("eMin").value) || 45));
     exam = { qs, ans: {}, i: 0, endsAt: Date.now() + mins * 60000, done: false };
     exam.timerId = setInterval(examTick, 1000);
     renderExamRunning();
@@ -493,7 +634,7 @@ function renderExamRunning() {
   document.getElementById("ePrev").onclick = () => { if (exam.i > 0) { exam.i--; showExamQ(); } };
   document.getElementById("eNext").onclick = () => { if (exam.i < exam.qs.length - 1) { exam.i++; showExamQ(); } };
   document.getElementById("eSubmit").onclick = () => {
-    const unanswered = exam.qs.length - Object.keys(exam.ans).length;
+    const unanswered = exam.qs.filter((q, i) => !isFree(q) && !exam.ans[i]).length;
     if (unanswered && !confirm(`還有 ${unanswered} 題未作答，確定交卷？`)) return;
     submitExam();
   };
@@ -506,13 +647,18 @@ function drawPalette() {
   exam.qs.forEach((q, i) => {
     const b = document.createElement("button");
     b.textContent = i + 1;
-    if (exam.ans[i]) b.classList.add("answered");
-    if (i === exam.i) b.classList.add("cur");
+    const answered = !!exam.ans[i], current = i === exam.i;
+    if (answered) b.classList.add("answered");
+    if (current) {
+      b.classList.add("cur");
+      b.setAttribute("aria-current", "step");
+    }
+    b.setAttribute("aria-label", `第 ${i + 1} 題，${answered ? "已作答" : "未作答"}${current ? "，目前題" : ""}`);
     b.onclick = () => { exam.i = i; showExamQ(); };
     pal.appendChild(b);
   });
 }
-function showExamQ() {
+function showExamQ(focusLetter = null) {
   const q = exam.qs[exam.i];
   const c = document.getElementById("eQ");
   c.innerHTML = `
@@ -524,11 +670,17 @@ function showExamQ() {
     const letter = "ABCD"[i];
     const b = document.createElement("button");
     b.className = "choice" + (exam.ans[exam.i] === letter ? " sel" : "");
+    b.dataset.letter = letter;
+    b.setAttribute("aria-pressed", exam.ans[exam.i] === letter);
     b.innerHTML = `<b>(${letter})</b> ${esc(txt)}`;
-    b.onclick = () => { exam.ans[exam.i] = letter; drawPalette(); showExamQ(); };
+    b.onclick = () => { exam.ans[exam.i] = letter; drawPalette(); showExamQ(letter); };
     box.appendChild(b);
   });
   drawPalette();
+  const prev = document.getElementById("ePrev"), next = document.getElementById("eNext");
+  if (prev) prev.disabled = exam.i === 0;
+  if (next) next.disabled = exam.i === exam.qs.length - 1;
+  if (focusLetter) requestAnimationFrame(() => c.querySelector(`[data-letter="${focusLetter}"]`)?.focus());
 }
 function submitExam() {
   clearInterval(exam.timerId);
@@ -536,7 +688,7 @@ function submitExam() {
   quizMode = "exam";
   let ok = 0;
   exam.qs.forEach((q, i) => {
-    const correct = exam.ans[i] ? isCorrectPick(q, exam.ans[i]) : false;
+    const correct = isFree(q) || !!(exam.ans[i] && isCorrectPick(q, exam.ans[i]));
     if (correct) ok++;
     recordAnswer(q, correct);
   });
@@ -562,7 +714,7 @@ function renderExamResult() {
   exam.qs.forEach((q, i) => {
     const b = document.createElement("button");
     b.textContent = i + 1;
-    const correct = exam.ans[i] && isCorrectPick(q, exam.ans[i]);
+    const correct = isFree(q) || !!(exam.ans[i] && isCorrectPick(q, exam.ans[i]));
     b.classList.add(correct ? "right" : "wrong");
     b.onclick = () => showResultQ(i);
     pal.appendChild(b);
@@ -574,6 +726,7 @@ function showResultQ(i) {
   const q = exam.qs[i];
   const c = document.getElementById("rQ");
   const picked = exam.ans[i];
+  const correct = isFree(q) || !!(picked && isCorrectPick(q, picked));
   const lawTags = (q.laws || []).map(t =>
     `<span class="tag">${esc(LAW_NAMES[t.law] || t.law)}${t.art ? " §" + esc(t.art) : ""}</span>`).join("");
   c.innerHTML = `
@@ -587,9 +740,8 @@ function showResultQ(i) {
       if (picked === letter && !isCorrectPick(q, letter)) cl += " wrongpick";
       return `<button class="${cl}" disabled><b>(${letter})</b> ${esc(txt)}</button>`;
     }).join("")}</div>
-    <div class="feedback ${picked && isCorrectPick(q, picked) ? "ok" : "bad"}">
-      ${picked ? (isCorrectPick(q, picked) ? "答對" : `你的答案：${picked}，正確答案：${q.answer}`) : `未作答，正確答案：${q.answer}`}
-      ${isFree(q) ? "（本題送分）" : ""}
+    <div class="feedback ${correct ? "ok" : "bad"}" role="status" aria-live="polite">
+      ${isFree(q) ? "本題送分（一律給分）" : picked ? (correct ? "答對" : `你的答案：${picked}，正確答案：${q.answer}`) : `未作答，正確答案：${q.answer}`}
     </div>`;
 }
 
@@ -599,12 +751,13 @@ function renderEssay() {
   const essays = BANK.essays.filter(e => e.cls === cls);
   const subs = [...new Set(essays.map(e => e.subject))];
   const years = [...new Set(essays.map(e => e.year))].sort((a, b) => b - a);
+  const saveNoteSoon = debounce(() => { essayNoteDirty = false; save(); }, 300);
   quizBody().innerHTML = `
     <div class="card">
       <h2>申論題庫（消防設備${cls}）</h2>
       <div class="row">
-        <select id="sSub"><option value="">全部科目</option>${subs.map(s => `<option>${esc(s)}</option>`).join("")}</select>
-        <select id="sYear"><option value="">全部年份</option>${years.map(y => `<option>${y}</option>`).join("")}</select>
+        <select id="sSub" aria-label="申論科目"><option value="">全部科目</option>${subs.map(s => `<option>${esc(s)}</option>`).join("")}</select>
+        <select id="sYear" aria-label="申論年份"><option value="">全部年份</option>${years.map(y => `<option>${y}</option>`).join("")}</select>
       </div>
       <p class="muted">申論題無官方標準答案，請自行作答後自評熟練度；筆記會自動儲存。</p>
     </div>
@@ -624,7 +777,7 @@ function renderEssay() {
         <div class="q-stem">${esc(e.text)}</div>
         <details ${st.note ? "open" : ""}>
           <summary class="muted">我的作答筆記</summary>
-          <textarea data-eid="${e.id}" placeholder="在此擬答、記重點…">${esc(st.note || "")}</textarea>
+          <textarea data-eid="${e.id}" aria-label="${esc(`${e.year}年 ${e.subject} 第${e.no}題的作答筆記`)}" placeholder="在此擬答、記重點…">${esc(st.note || "")}</textarea>
         </details>
         <div class="q-nav">
           <button class="btn small ghost" data-lv="ok" data-eid="${e.id}">標記已熟悉</button>
@@ -633,10 +786,15 @@ function renderEssay() {
       </div>`;
     }).join("") || `<div class="card muted">沒有符合條件的申論題</div>`;
     document.querySelectorAll("#sList textarea").forEach(t => {
-      t.onchange = () => {
+      t.oninput = () => {
         const st = store.essay[t.dataset.eid] || {};
-        st.note = t.value; store.essay[t.dataset.eid] = st; save();
+        st.note = t.value;
+        store.essay[t.dataset.eid] = st;
+        essayNoteDirty = true;
+        store._ts = Date.now();
+        saveNoteSoon();
       };
+      t.onchange = () => saveNoteSoon.flush();
     });
     document.querySelectorAll("#sList [data-lv]").forEach(b => {
       b.onclick = () => {
@@ -727,10 +885,33 @@ let lawFilter = "all";
 let customLawEditor = null;
 let customArticleEdit = null;
 function allLaws() { return [...LAWS.laws, ...(store.customLaws || [])]; }
-function currentLaw() { return allLaws().find(l => l.key === curLaw); }
+function currentLaw() {
+  const laws = allLaws();
+  return laws.find(law => law.key === curLaw) || laws[0] || null;
+}
+function moveArticleState(oldKey, newKey) {
+  if (oldKey === newKey) return;
+  [store.lawRead, store.lawNote, store.lawStar].forEach(map => {
+    if (!Object.hasOwn(map, oldKey)) return;
+    map[newKey] = map[oldKey];
+    delete map[oldKey];
+  });
+}
+function clearLawState(lawKey) {
+  const prefix = `${lawKey}:`;
+  [store.lawRead, store.lawNote, store.lawStar].forEach(map => {
+    Object.keys(map).filter(key => key.startsWith(prefix)).forEach(key => delete map[key]);
+  });
+}
 function renderLaws() {
-  curLaw = curLaw || allLaws()[0].key;
-  const law = currentLaw() || allLaws()[0];
+  const laws = allLaws();
+  const law = currentLaw();
+  if (!law) return;
+  curLaw = law.key;
+  if (customArticleEdit !== null && !law.articles[customArticleEdit]) {
+    customArticleEdit = null;
+    customLawEditor = null;
+  }
   const readCnt = law.articles.filter(a => store.lawRead[law.key + ":" + a.no] === "read").length;
   const skipCnt = law.articles.filter(a => store.lawRead[law.key + ":" + a.no] === "skip").length;
   const filters = [["all", "全部條文"], ["unread", "未讀"], ["skip", "先跳過"], ["read", "已讀"]];
@@ -738,8 +919,8 @@ function renderLaws() {
     <div class="law-layout">
       <aside class="law-side">
         <div class="side-title">法規分類</div>
-        ${allLaws().map(l =>
-          `<button class="${l.key === curLaw ? "active" : ""}" data-law="${l.key}">${esc(l.name)}</button>`).join("")}
+        ${laws.map(l =>
+          `<button class="${l.key === curLaw ? "active" : ""}" data-law="${esc(l.key)}" ${l.key === curLaw ? 'aria-current="true"' : ""}>${esc(l.name)}</button>`).join("")}
         <button class="law-add" id="addCustomLaw" type="button">＋ 新增我的分類</button>
       </aside>
       <section class="law-content">
@@ -755,8 +936,8 @@ function renderLaws() {
           </div>
           <div class="row" style="margin-top:12px">
             <div class="filter-chips">${filters.map(([v, t]) =>
-              `<button class="${lawFilter === v ? "active" : ""}" data-f="${v}">${t}</button>`).join("")}</div>
-            <input type="text" id="lSearch" placeholder="搜尋條文關鍵字…" style="width:180px; margin-left:auto">
+              `<button class="${lawFilter === v ? "active" : ""}" data-f="${v}" aria-pressed="${lawFilter === v}">${t}</button>`).join("")}</div>
+            <input type="text" id="lSearch" aria-label="搜尋條文" placeholder="搜尋條文關鍵字…" style="width:180px; margin-left:auto">
           </div>
           <p class="muted" style="margin-top:10px">${law.custom ? "可直接新增你的教材標題與內容；每一段同樣可標記、加星或寫筆記。" : "圖示：✎ 寫解釋（儲存後取代原文顯示，原文收合可展開）｜✓ 已讀完（相關考古題進入定時彈題池）｜⚠ 不懂，先跳過。點條號旁星星標記重要性（1–5 星），點條號可開啟全國法規資料庫該條原文。"}</p>
         </div>
@@ -778,6 +959,7 @@ function renderLaws() {
     </div>`;
   document.querySelectorAll("[data-law]").forEach(b =>
     b.onclick = () => { curLaw = b.dataset.law; customLawEditor = null; customArticleEdit = null; renderLaws(); });
+  requestAnimationFrame(() => scrollActiveIntoView(document.querySelector("[data-law].active")));
   document.getElementById("addCustomLaw").onclick = () => { customLawEditor = "category"; renderLaws(); };
   const addArticle = document.getElementById("addCustomArticle");
   if (addArticle) addArticle.onclick = () => { customLawEditor = "article"; customArticleEdit = null; renderLaws(); };
@@ -785,6 +967,7 @@ function renderLaws() {
   if (deleteLaw) deleteLaw.onclick = () => {
     if (!confirm(`刪除「${law.name}」及其中所有內容？`)) return;
     store.customLaws = store.customLaws.filter(item => item.key !== law.key);
+    clearLawState(law.key);
     curLaw = LAWS.laws[0].key; save(); renderLaws();
   };
   const cancelCustom = document.getElementById("cancelCustomEntry");
@@ -802,22 +985,42 @@ function renderLaws() {
       const no = document.getElementById("customArticleTitle").value.trim();
       const text = document.getElementById("customArticleText").value.trim();
       if (!no || !text) return alert("請填寫段落標題與內容。");
+      const duplicate = law.articles.some((article, index) => index !== customArticleEdit && article.no.trim() === no);
+      if (duplicate) {
+        alert("同一分類不能有重複的段落標題。");
+        document.getElementById("customArticleTitle").focus();
+        return;
+      }
       if (customArticleEdit === null) law.articles.push({ no, text });
-      else law.articles[customArticleEdit] = { ...law.articles[customArticleEdit], no, text };
+      else {
+        const oldNo = law.articles[customArticleEdit].no;
+        law.articles[customArticleEdit] = { ...law.articles[customArticleEdit], no, text };
+        moveArticleState(`${law.key}:${oldNo}`, `${law.key}:${no}`);
+      }
     }
     customLawEditor = null; customArticleEdit = null; save(); renderLaws();
   };
   const chips = [...document.querySelectorAll("[data-f]")];
   chips.forEach(b => b.onclick = () => {
     lawFilter = b.dataset.f;
-    chips.forEach(c => c.classList.toggle("active", c === b));
+    chips.forEach(c => {
+      const active = c === b;
+      c.classList.toggle("active", active);
+      c.setAttribute("aria-pressed", active);
+    });
     drawArts();
   });
   document.getElementById("lSearch").oninput = debounce(drawArts, 300);
   drawArts();
   if (AI_ENABLED) wireAiTutor();
 }
-function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+function debounce(fn, ms) {
+  let timer = null, args;
+  const run = () => { timer = null; fn(...args); };
+  const wrapped = (...nextArgs) => { args = nextArgs; clearTimeout(timer); timer = setTimeout(run, ms); };
+  wrapped.flush = () => { if (timer === null) return; clearTimeout(timer); run(); };
+  return wrapped;
+}
 function attachSpeechInput(button, target) {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Recognition) {
@@ -911,13 +1114,13 @@ function drawArts() {
       <div class="art-card ${st}" id="art-${esc(a.no)}">
         <div class="art-head">
           ${law.custom ? `<span class="art-no">${esc(a.no)}</span>` : `<a class="art-no" href="https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=${law.pcode}&flno=${esc(a.no)}" target="_blank" title="開啟全國法規資料庫原文">第 ${esc(a.no)} 條</a>`}
-          <span class="stars" data-star="${stateKey}" title="標記重要性">${[1, 2, 3, 4, 5].map(n =>
-            `<span class="star ${n <= (store.lawStar[stateKey] || 0) ? "on" : ""}" data-n="${n}">★</span>`).join("")}</span>
-          ${relShow.length ? `<button class="chk" data-rel="${stateKey}">📌 考古題 ${relShow.length}</button>` : ""}
+          <span class="stars" data-star="${esc(stateKey)}" aria-label="重要性">${[1, 2, 3, 4, 5].map(n =>
+            `<button type="button" class="star ${n <= (store.lawStar[stateKey] || 0) ? "on" : ""}" data-n="${n}" aria-label="設為 ${n} 星" aria-pressed="${n === (store.lawStar[stateKey] || 0)}">★</button>`).join("")}</span>
+          ${relShow.length ? `<button class="chk" data-rel="${esc(stateKey)}">📌 考古題 ${relShow.length}</button>` : ""}
           <div class="art-actions">
-            <button class="chk icon ${note ? "on-note" : ""}" data-note="${stateKey}" title="${note ? "改解釋" : "寫解釋"}">✎</button>
-            <button class="chk icon ${st === "read" ? "on-read" : ""}" data-mark="read" data-key="${stateKey}" title="已讀完">✓</button>
-            <button class="chk icon ${st === "skip" ? "on-skip" : ""}" data-mark="skip" data-key="${stateKey}" title="不懂，先跳過">⚠</button>
+            <button class="chk icon ${note ? "on-note" : ""}" data-note="${esc(stateKey)}" title="${note ? "改解釋" : "寫解釋"}">✎</button>
+            <button class="chk icon ${st === "read" ? "on-read" : ""}" data-mark="read" data-key="${esc(stateKey)}" title="已讀完" aria-pressed="${st === "read"}">✓</button>
+            <button class="chk icon ${st === "skip" ? "on-skip" : ""}" data-mark="skip" data-key="${esc(stateKey)}" title="不懂，先跳過" aria-pressed="${st === "skip"}">⚠</button>
             ${law.custom ? `<button class="chk icon" data-custom-edit="${articleIndex}" title="更新這段教材">↻</button>` : ""}
             ${law.custom ? `<button class="chk icon custom-delete" data-custom-delete="${articleIndex}" title="刪除這段教材">🗑</button>` : ""}
           </div>
@@ -926,8 +1129,8 @@ function drawArts() {
           <div class="art-note">${sanitizeNote(note)}</div>
           <details class="art-orig"><summary>📄 條文原文（點開對照）</summary><div class="art-text">${esc(a.text)}</div></details>`
         : `<div class="art-text">${esc(a.text)}</div>`}
-        <div class="note-edit hidden" data-notebox="${stateKey}"></div>
-        <div class="rel-qs hidden" data-relbox="${stateKey}"></div>
+        <div class="note-edit hidden" data-notebox="${esc(stateKey)}"></div>
+        <div class="rel-qs hidden" data-relbox="${esc(stateKey)}"></div>
       </div>`);
   }
   const box = document.getElementById("artList");
@@ -956,19 +1159,20 @@ function drawArts() {
     renderLaws();
   });
   box.querySelectorAll("[data-star]").forEach(el => {
-    el.onclick = ev => {
-      const n = +ev.target.dataset.n;
-      if (!n) return;
+    el.querySelectorAll("[data-n]").forEach(button => button.onclick = () => {
+      const n = +button.dataset.n;
       const k = el.dataset.star;
       store.lawStar[k] = store.lawStar[k] === n ? undefined : n;
       if (!store.lawStar[k]) delete store.lawStar[k];
       save(); drawArts();
-    };
+      const group = [...box.querySelectorAll("[data-star]")].find(item => item.dataset.star === k);
+      group?.querySelector(`[data-n="${n}"]`)?.focus();
+    });
   });
   box.querySelectorAll("[data-note]").forEach(b => {
     b.onclick = () => {
       const k = b.dataset.note;
-      const nb = box.querySelector(`[data-notebox="${k}"]`);
+      const nb = b.closest(".art-card").querySelector("[data-notebox]");
       if (!nb.classList.contains("hidden")) { nb.classList.add("hidden"); return; }
       nb.classList.remove("hidden");
       nb.innerHTML = `
@@ -977,7 +1181,7 @@ function drawArts() {
           ${NOTE_COLORS.map(c => `<button class="color-dot" data-color="${c.v}" style="background:${c.v}" title="${c.n}"></button>`).join("")}
           <button class="btn small ghost" data-voice-note><i class="ph ph-microphone" aria-hidden="true"></i> 語音輸入</button>
         </div>
-        <div class="note-area" contenteditable="true" data-ph="用自己的話解釋這一條，儲存後會取代原文顯示（原文收合可展開對照）"></div>
+        <div class="note-area" contenteditable="true" role="textbox" aria-label="條文解釋" aria-multiline="true" data-ph="用自己的話解釋這一條，儲存後會取代原文顯示（原文收合可展開對照）"></div>
         <div class="row">
           <button class="btn small" data-nsave>儲存</button>
           <button class="btn small ghost" data-ncancel>取消</button>
@@ -1008,7 +1212,7 @@ function drawArts() {
   box.querySelectorAll("[data-rel]").forEach(b => {
     b.onclick = () => {
       const k = b.dataset.rel;
-      const relBox = box.querySelector(`[data-relbox="${k}"]`);
+      const relBox = b.closest(".art-card").querySelector("[data-relbox]");
       if (!relBox.classList.contains("hidden")) { relBox.classList.add("hidden"); return; }
       relBox.classList.remove("hidden");
       const cls = store.settings.cls;
@@ -1027,6 +1231,15 @@ function drawArts() {
 let calMonth = null;   // {y, m}（m: 0–11）
 let calSel = null;     // "YYYY-MM-DD"
 function dstr(y, m, d) { return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`; }
+function changeCalendarMonth(offset) {
+  const selectedDay = calSel && /^\d{4}-\d{2}-\d{2}$/.test(calSel) ? +calSel.slice(8) : 1;
+  const next = new Date(calMonth.y, calMonth.m + offset, 1);
+  calMonth = { y: next.getFullYear(), m: next.getMonth() };
+  const lastDay = new Date(calMonth.y, calMonth.m + 1, 0).getDate();
+  calSel = dstr(calMonth.y, calMonth.m, Math.min(selectedDay, lastDay));
+  calEdit = null;
+  renderCalendar();
+}
 function renderCalendar() {
   const now = new Date();
   if (!calMonth) calMonth = { y: now.getFullYear(), m: now.getMonth() };
@@ -1040,7 +1253,7 @@ function renderCalendar() {
     const k = dstr(y, m, d);
     const dayList = store.schedule[k] || [];
     const imps = dayList.filter(x => x.imp);
-    cells.push(`<button class="cal-day ${k === today() ? "today" : ""} ${k === calSel ? "sel" : ""}" data-day="${k}">
+    cells.push(`<button class="cal-day ${k === today() ? "today" : ""} ${k === calSel ? "sel" : ""}" data-day="${k}" aria-label="${k}${k === today() ? "，今天" : ""}${dayList.length ? `，${dayList.length} 項安排` : ""}" aria-pressed="${k === calSel}" ${k === today() ? 'aria-current="date"' : ""}>
       <span class="d">${d}</span>
       ${imps.slice(0, 2).map(x => `<span class="cal-imp ${x.done ? "done" : ""}">⭐${esc(x.t.length > 5 ? x.t.slice(0, 5) + "…" : x.t)}</span>`).join("")}
       ${dayList.length ? `<span class="cal-n">${dayList.length} 項</span>` : ""}
@@ -1051,9 +1264,9 @@ function renderCalendar() {
       <div class="row" style="justify-content:space-between">
         <h2 style="margin:0"><i class="ph ph-calendar-dots" aria-hidden="true"></i> 讀書日曆</h2>
         <div class="row">
-          <button class="btn ghost small" id="calPrev">‹</button>
+          <button class="btn ghost small" id="calPrev" aria-label="上一個月">‹</button>
           <b>${y} 年 ${m + 1} 月</b>
-          <button class="btn ghost small" id="calNext">›</button>
+          <button class="btn ghost small" id="calNext" aria-label="下一個月">›</button>
         </div>
       </div>
       <div class="cal-week">${["日", "一", "二", "三", "四", "五", "六"].map(w => `<div>${w}</div>`).join("")}</div>
@@ -1061,8 +1274,8 @@ function renderCalendar() {
     </div>
     <div class="card" id="calDetail"></div>`;
   applyStitchShell("calendar");
-  document.getElementById("calPrev").onclick = () => { calMonth = m ? { y, m: m - 1 } : { y: y - 1, m: 11 }; calEdit = null; renderCalendar(); };
-  document.getElementById("calNext").onclick = () => { calMonth = m < 11 ? { y, m: m + 1 } : { y: y + 1, m: 0 }; calEdit = null; renderCalendar(); };
+  document.getElementById("calPrev").onclick = () => changeCalendarMonth(-1);
+  document.getElementById("calNext").onclick = () => changeCalendarMonth(1);
   document.querySelectorAll("[data-day]").forEach(b =>
     b.onclick = () => { calSel = b.dataset.day; calEdit = null; renderCalendar(); });
   drawCalDetail();
@@ -1085,13 +1298,14 @@ function drawCalDetail() {
         <button class="chk icon" data-del="${it.oi}" title="刪除">✕</button>
       </div>`).join("") : `<p class="muted">這天還沒有安排。</p>`}
     <div class="row" style="margin-top:12px">
-      <input type="time" id="calS" value="${editing ? editing.s : "19:00"}"><span class="muted">到</span>
-      <input type="time" id="calE" value="${editing ? editing.e : "21:00"}">
-      <input type="text" id="calT" placeholder="要做什麼？例如：讀設置標準 §1–30" style="flex:1; min-width:180px" value="${editing ? esc(editing.t) : ""}">
+      <input type="time" id="calS" aria-label="開始時間" aria-describedby="calError" value="${editing ? editing.s : "19:00"}"><span class="muted">到</span>
+      <input type="time" id="calE" aria-label="結束時間" aria-describedby="calError" value="${editing ? editing.e : "21:00"}">
+      <input type="text" id="calT" aria-label="行程內容" aria-describedby="calError" placeholder="要做什麼？例如：讀設置標準 §1–30" style="flex:1; min-width:180px" value="${editing ? esc(editing.t) : ""}">
       <label class="muted" style="white-space:nowrap"><input type="checkbox" id="calImp" ${editing && editing.imp ? "checked" : ""}> ⭐ 重要</label>
       <button class="btn" id="calAdd">${editing ? "儲存修改" : "新增"}</button>
       ${editing ? `<button class="btn ghost" id="calCancel">取消</button>` : ""}
     </div>
+    <p id="calError" class="feedback bad hidden" role="alert"></p>
     <p class="muted" style="margin-top:6px">標「⭐ 重要」的排程會直接顯示在月曆格子上。點行程旁 ✎ 可修改、✕ 刪除。</p>`;
   box.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
     orig.splice(+b.dataset.del, 1);
@@ -1107,9 +1321,20 @@ function drawCalDetail() {
     b.onclick = () => { calEdit = +b.dataset.edit; drawCalDetail(); });
   if (editing) document.getElementById("calCancel").onclick = () => { calEdit = null; drawCalDetail(); };
   document.getElementById("calAdd").onclick = () => {
-    const s = document.getElementById("calS").value, e = document.getElementById("calE").value,
-          t = document.getElementById("calT").value.trim();
-    if (!s || !e || !t) return;
+    const startInput = document.getElementById("calS"), endInput = document.getElementById("calE"),
+          titleInput = document.getElementById("calT"), error = document.getElementById("calError");
+    const s = startInput.value, e = endInput.value, t = titleInput.value.trim();
+    const showError = (message, input) => {
+      error.textContent = message;
+      error.classList.remove("hidden");
+      [startInput, endInput, titleInput].forEach(field => field.removeAttribute("aria-invalid"));
+      input.setAttribute("aria-invalid", "true");
+      input.focus();
+    };
+    if (!s) return showError("請選擇開始時間。", startInput);
+    if (!e) return showError("請選擇結束時間。", endInput);
+    if (!t) return showError("請輸入行程內容。", titleInput);
+    if (e <= s) return showError("結束時間必須晚於開始時間。", endInput);
     const entry = { s, e, t, done: editing ? !!editing.done : false };
     if (document.getElementById("calImp").checked) entry.imp = true;
     if (calEdit !== null) orig[calEdit] = entry;
@@ -1143,8 +1368,9 @@ function renderPlan() {
     else break;
   }
   const doneUnique = Object.keys(store.rec).length;
-  const readN = Object.values(store.lawRead).filter(v => v === "read").length;
-  const totalArts = LAWS.laws.reduce((n, l) => n + l.articles.length, 0);
+  const validArticleKeys = allLaws().flatMap(law => law.articles.map(article => `${law.key}:${article.no}`));
+  const readN = validArticleKeys.filter(key => store.lawRead[key] === "read").length;
+  const totalArts = validArticleKeys.length;
   const pendingTasks = Object.entries(store.schedule || {}).flatMap(([date, items]) =>
     (Array.isArray(items) ? items : []).filter(item => !item.done).map(item => ({ ...item, date })))
     .sort((a, b) => a.date.localeCompare(b.date) || (a.s || "").localeCompare(b.s || ""));
@@ -1207,11 +1433,11 @@ function renderPlan() {
       <div class="row">
         ${localStorage.getItem("fireExamSyncCode") ? `
           <span class="tag blue"><i class="ph ph-cloud-check" aria-hidden="true"></i> 雲端同步已啟用</span>
-          <span class="muted" id="syncStatus"></span>
+          <span class="muted" id="syncStatus" role="status" aria-live="polite" aria-atomic="true"></span>
           <button class="btn small" id="syncNow">立即同步</button>
           <button class="btn ghost small" id="syncOff">停用同步</button>`
         : `
-          <input type="text" id="syncCode" placeholder="自訂一組同步碼（至少 6 個字）" style="width:230px">
+          <input type="text" id="syncCode" aria-label="雲端同步碼" placeholder="自訂一組同步碼（至少 6 個字）" style="width:230px">
           <button class="btn small" id="syncOn"><i class="ph ph-cloud-arrow-up" aria-hidden="true"></i> 啟用雲端同步</button>`}
       </div>
       <p class="muted">啟用後，紀錄會自動同步到雲端；在其他電腦、手機輸入同一組同步碼即可接續讀書進度。同步碼就是你的鑰匙——自己記住、不要外流，忘記就取不回雲端資料。</p>
@@ -1228,20 +1454,26 @@ function renderPlan() {
     button.onclick = () => switchView(button.dataset.planGo));
   document.getElementById("planDate").onchange = e => { s.examDate = e.target.value; save(); renderPlan(); };
   document.getElementById("planTarget").onchange = e => {
-    s.dailyTarget = Math.max(5, parseInt(e.target.value) || 40); save(); renderPlan();
+    s.dailyTarget = Math.min(500, Math.max(5, parseInt(e.target.value) || 40)); save(); renderPlan();
   };
   const syncOnBtn = document.getElementById("syncOn");
   if (syncOnBtn) syncOnBtn.onclick = async () => {
     const code = document.getElementById("syncCode").value.trim();
     if (code.length < 6) { alert("同步碼至少 6 個字，太短容易被猜到"); return; }
     if (!window.isSecureContext) { alert("此開啟方式不支援同步，請改用網址開啟（https 或 localhost）"); return; }
+    const generation = ++syncGeneration;
+    clearTimeout(syncPushTimer);
+    const key = await sha256Hex(code);
+    if (generation !== syncGeneration) return;
     localStorage.setItem("fireExamSyncCode", code);
-    syncKeyHash = await sha256Hex(code);
-    await pullCloud();
-    renderPlan();
+    syncKeyHash = key;
+    await pullCloud(generation, key);
+    if (currentView === "plan" && isCurrentSync(generation, key)) renderPlan();
   };
   const syncOffBtn = document.getElementById("syncOff");
   if (syncOffBtn) syncOffBtn.onclick = () => {
+    syncGeneration++;
+    clearTimeout(syncPushTimer);
     localStorage.removeItem("fireExamSyncCode");
     syncKeyHash = null; syncState = "off";
     renderPlan();
@@ -1251,10 +1483,13 @@ function renderPlan() {
   updateSyncUI();
   document.getElementById("expData").onclick = () => {
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(store)], { type: "application/json" }));
+    const url = URL.createObjectURL(new Blob([JSON.stringify(store)], { type: "application/json" }));
+    a.href = url;
     a.download = `fire-exam-備份-${today()}.json`;
+    a.hidden = true;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1000);
   };
   document.getElementById("impData").onclick = () => document.getElementById("impFile").click();
   document.getElementById("impFile").onchange = e => {
@@ -1264,9 +1499,9 @@ function renderPlan() {
     r.onload = () => {
       try {
         const data = JSON.parse(r.result);
-        if (!data.settings || !data.rec) throw new Error("格式不符");
+        if (!isRecord(data) || !isRecord(data.settings) || !isRecord(data.rec)) throw new Error("格式不符");
         if (!confirm("將以備份檔覆蓋目前所有學習紀錄，確定匯入？")) return;
-        store = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STORE)), data);
+        store = normalizeStore(data);
         save();
         alert("匯入完成！");
         location.reload();
@@ -1285,53 +1520,80 @@ async function sha256Hex(s) {
 async function initSync() {
   const code = localStorage.getItem("fireExamSyncCode");
   if (!code || !window.isSecureContext) return;   // file:// 開啟時無法使用
-  syncKeyHash = await sha256Hex(code);
-  pullCloud();
+  const generation = ++syncGeneration;
+  const key = await sha256Hex(code);
+  if (generation !== syncGeneration) return;
+  syncKeyHash = key;
+  pullCloud(generation, key);
 }
-async function pullCloud() {
-  if (!syncKeyHash) return;
+function isCurrentSync(generation, key) {
+  return generation === syncGeneration && key === syncKeyHash;
+}
+async function pullCloud(generation = syncGeneration, key = syncKeyHash, resolveConflict = false) {
+  if (!key || !isCurrentSync(generation, key)) return;
   syncState = "syncing"; updateSyncUI();
   try {
-    const r = await fetch(SYNC_API, { headers: { "x-sync-key": syncKeyHash } });
-    if (r.status === 404) { await pushCloud(); return; }   // 雲端還沒有資料：上傳本地
+    const r = await fetch(SYNC_API, { headers: { "x-sync-key": key } });
+    if (!isCurrentSync(generation, key)) return;
+    if (r.status === 404) { await pushCloud(generation, key); return; }   // 雲端還沒有資料：上傳本地
     if (!r.ok) throw 0;
-    const cloud = await r.json();
+    const cloud = normalizeStore(await r.json());
+    if (!isCurrentSync(generation, key)) return;
     // 防呆：空資料不得蓋掉有紀錄的一方，不論時間戳
-    const hasData = s => !!(Object.keys(s.rec || {}).length || Object.keys(s.lawNote || {}).length
-      || Object.keys(s.lawRead || {}).length || Object.keys(s.schedule || {}).length || (s.customLaws || []).length);
     const localEmpty = !hasData(store);
-    if (!hasData(cloud) && !localEmpty) { await pushCloud(); return; }
-    if (localEmpty || (cloud._ts || 0) > (store._ts || 0)) {
-      store = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STORE)), cloud);
+    const cloudEmpty = !hasData(cloud);
+    const cloudTs = cloud._ts || 0;
+    const localTs = store._ts || 0;
+    if (cloudEmpty && !localEmpty) {
+      if (resolveConflict && cloudTs >= localTs) {
+        store._ts = Math.max(Date.now(), cloudTs + 1);
+        persist();
+      }
+      await pushCloud(generation, key);
+      return;
+    }
+    if (localEmpty || cloudTs > localTs || (resolveConflict && cloudTs === localTs)) {
+      store = cloud;
       persist();
-      refreshClsBtns(); switchView(currentView);
-    } else if ((store._ts || 0) > (cloud._ts || 0)) {
-      await pushCloud(); return;
+      refreshClsBtns(); scheduleQuiz(); switchView(currentView, false);
+    } else if (localTs > cloudTs) {
+      await pushCloud(generation, key); return;
     }
     syncState = "ok"; syncLastAt = Date.now();
-  } catch { syncState = "error"; }
-  updateSyncUI();
+  } catch { if (isCurrentSync(generation, key)) syncState = "error"; }
+  if (isCurrentSync(generation, key)) updateSyncUI();
 }
 function pushCloudSoon() {
   if (!syncKeyHash) return;
   clearTimeout(syncPushTimer);
-  syncPushTimer = setTimeout(pushCloud, 3000);
+  syncPushTimer = setTimeout(() => pushCloud(syncGeneration, syncKeyHash), 3000);
 }
-async function pushCloud() {
-  if (!syncKeyHash) return;
+function pushCloud(generation = syncGeneration, key = syncKeyHash) {
+  if (!key || !isCurrentSync(generation, key)) return Promise.resolve();
   // 舊資料可能還沒有 _ts，補上再推，否則其他裝置無法判斷新舊
   if (!store._ts) { store._ts = Date.now(); localStorage.setItem("fireExam", JSON.stringify(store)); }
-  syncState = "syncing"; updateSyncUI();
-  try {
-    const r = await fetch(SYNC_API, {
-      method: "PUT",
-      headers: { "content-type": "application/json", "x-sync-key": syncKeyHash },
-      body: JSON.stringify(store),
-    });
-    if (!r.ok) throw 0;
-    syncState = "ok"; syncLastAt = Date.now();
-  } catch { syncState = "error"; }
-  updateSyncUI();
+  const snapshot = JSON.stringify(store);
+  const upload = async () => {
+    if (!isCurrentSync(generation, key)) return;
+    syncState = "syncing"; updateSyncUI();
+    try {
+      const r = await fetch(SYNC_API, {
+        method: "PUT",
+        headers: { "content-type": "application/json", "x-sync-key": key },
+        body: snapshot,
+      });
+      if (!isCurrentSync(generation, key)) return;
+      if (r.status === 409) {
+        setTimeout(() => pullCloud(generation, key, true), 0);
+        return;
+      }
+      if (!r.ok) throw 0;
+      syncState = "ok"; syncLastAt = Date.now();
+    } catch { if (isCurrentSync(generation, key)) syncState = "error"; }
+    if (isCurrentSync(generation, key)) updateSyncUI();
+  };
+  syncWriteQueue = syncWriteQueue.catch(() => {}).then(upload);
+  return syncWriteQueue;
 }
 function updateSyncUI() {
   const el = document.getElementById("syncStatus");
@@ -1345,6 +1607,24 @@ function updateSyncUI() {
 
 // ===== 定時彈題 =====
 let quizTimerId = null;
+let quizModalReturnFocus = null;
+function setPageInert(inert) {
+  [document.querySelector("header"), view].forEach(element => {
+    if (!element) return;
+    element.inert = inert;
+    if (inert) element.setAttribute("inert", "");
+    else element.removeAttribute("inert");
+  });
+}
+function closeQuizModal() {
+  const modal = document.getElementById("quizModal");
+  if (modal.classList.contains("hidden")) return;
+  modal.classList.add("hidden");
+  modal.onkeydown = null;
+  setPageInert(false);
+  if (quizModalReturnFocus && quizModalReturnFocus.isConnected) quizModalReturnFocus.focus();
+  quizModalReturnFocus = null;
+}
 function scheduleQuiz() {
   if (quizTimerId) { clearInterval(quizTimerId); quizTimerId = null; }
   if (store.settings.quizOn) {
@@ -1376,27 +1656,73 @@ function popQuiz(fixedQ, variant = true) {
   if (exam && !exam.done) return;                        // 模擬考中不打擾
   const q = fixedQ || pickQuizQuestion();
   if (!q) return;
+  quizModalReturnFocus = document.activeElement;
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-labelledby", "quizModalTitle");
   modal.innerHTML = `
     <div class="modal-box">
-      <div class="title"><i class="ph ph-alarm" aria-hidden="true"></i> 讀書提醒：來一題考古題！</div>
+      <div class="title" id="quizModalTitle"><i class="ph ph-alarm" aria-hidden="true"></i> 讀書提醒：來一題考古題！</div>
       <div id="mQ" class="q-card"></div>
       <div class="q-nav">
         <button class="btn ghost" id="mClose">關閉</button>
       </div>
     </div>`;
   modal.classList.remove("hidden");
-  renderQuestion(document.getElementById("mQ"), q, { variant });
-  document.getElementById("mClose").onclick = () => modal.classList.add("hidden");
-  modal.onclick = e => { if (e.target === modal) modal.classList.add("hidden"); };
+  setPageInert(true);
+  renderQuestion(document.getElementById("mQ"), q, {
+    variant,
+    onDone: () => document.getElementById("mClose")?.focus(),
+  });
+  document.getElementById("mClose").onclick = closeQuizModal;
+  modal.onclick = e => { if (e.target === modal) closeQuizModal(); };
+  modal.onkeydown = event => {
+    if (event.key === "Escape") { event.preventDefault(); closeQuizModal(); return; }
+    if (event.key !== "Tab") return;
+    const focusable = [...modal.querySelectorAll("button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])")]
+      .filter(element => !element.hidden && element.getClientRects().length);
+    if (!focusable.length) { event.preventDefault(); return; }
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    const activeIndex = focusable.indexOf(document.activeElement);
+    if (event.shiftKey && (document.activeElement === first || activeIndex < 0)) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && (document.activeElement === last || activeIndex < 0)) { event.preventDefault(); first.focus(); }
+  };
+  requestAnimationFrame(() => (modal.querySelector(".choice") || document.getElementById("mClose")).focus());
 }
 
 // ===== 啟動 =====
 refreshClsBtns();
 scheduleQuiz();
 // 支援 #quiz、#laws 等 hash 直達分頁（舊的 #practice／#exam／#essay／#wrong 導向題庫測驗頁對應模式）
-const initView = location.hash.slice(1);
 const legacyQuizModes = ["practice", "exam", "essay", "wrong"];
-if (legacyQuizModes.includes(initView)) quizMode = initView;
-switchView(["home", "quiz", "laws", "calendar", "plan"].includes(initView)
-  ? initView : legacyQuizModes.includes(initView) ? "quiz" : "home");
+const viewNames = ["home", "quiz", "laws", "calendar", "plan"];
+function applyHashRoute() {
+  if (hasRenderedView && location.hash === lastAppliedHash) return;
+  lastAppliedHash = location.hash;
+  const route = location.hash.slice(1);
+  const knownRoute = viewNames.includes(route) || legacyQuizModes.includes(route);
+  if (!knownRoute && hasRenderedView) return;
+  if (legacyQuizModes.includes(route)) quizMode = route;
+  switchView(viewNames.includes(route) ? route : legacyQuizModes.includes(route) ? "quiz" : "home", false);
+}
+window.addEventListener("hashchange", applyHashRoute);
+window.addEventListener("popstate", applyHashRoute);
+window.addEventListener("storage", event => {
+  if (event.key !== "fireExam" || !event.newValue) return;
+  try {
+    const incoming = normalizeStore(JSON.parse(event.newValue));
+    if ((incoming._ts || 0) <= (store._ts || 0)) return;
+    clearTimeout(syncPushTimer);
+    syncPushTimer = null;
+    store = incoming;
+    essayNoteDirty = false;
+    refreshClsBtns();
+    scheduleQuiz();
+    switchView(currentView, false);
+  } catch { /* 忽略其他分頁寫入的壞資料 */ }
+});
+window.addEventListener("pagehide", () => {
+  if (essayNoteDirty) persist();
+});
+applyHashRoute();
 initSync();

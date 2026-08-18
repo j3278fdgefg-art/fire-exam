@@ -3,19 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>消防設備士備考室</title>
+<title>消防設備師／士備考室</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap">
 <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
-<link rel="stylesheet" href="css/style.css?v=calendar-todo-1">
-<link rel="stylesheet" href="css/stitch-template.css?v=stitch-v2-7">
+<link rel="stylesheet" href="css/style.css?v=responsive-a11y-1">
+<link rel="stylesheet" href="css/stitch-template.css?v=responsive-a11y-1">
 </head>
 <body>
 <a class="skip-link" href="#view">跳到主要內容</a>
 <header>
-  <div class="brand"><i class="ph ph-fire-simple brand-mark" aria-hidden="true"></i> 消防設備士備考室</div>
-  <div class="cls-switch" aria-label="考試類別">
+  <div class="brand" role="heading" aria-level="1"><i class="ph ph-fire-simple brand-mark" aria-hidden="true"></i> 消防設備師／士備考室</div>
+  <div class="cls-switch" role="group" aria-label="考試類別">
     <button id="clsShi" class="cls-btn">設備士</button>
     <button id="clsMaster" class="cls-btn">設備師</button>
   </div>
@@ -27,10 +27,10 @@
     <button data-view="plan"><i class="ph ph-target" aria-hidden="true"></i>讀書計畫</button>
   </nav>
 </header>
-<main id="view"></main>
-<div id="quizModal" class="modal hidden"></div>
+<main id="view" tabindex="-1"></main>
+<div id="quizModal" class="modal hidden" tabindex="-1"></div>
 <script src="data/bank.js"></script>
 <script src="data/laws.js"></script>
-<script src="js/app.js?v=stitch-v2-7"></script>
+<script src="js/app.js?v=responsive-a11y-1"></script>
 </body>
 </html>
