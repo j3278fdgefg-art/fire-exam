@@ -1033,14 +1033,22 @@ function attachSpeechInput(button, target) {
     recognition.lang = "zh-TW";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    const original = "value" in target ? target.value : target.innerText;
+    const original = "value" in target ? target.value : "";
     button.disabled = true;
     button.textContent = "正在聽…";
     recognition.onresult = event => {
       const spoken = [...event.results].map(result => result[0].transcript).join("").trim();
-      const text = [original.trim(), spoken].filter(Boolean).join(original.trim() ? "\n" : "");
-      if ("value" in target) target.value = text;
-      else target.textContent = text;
+      if ("value" in target) {
+        if (spoken) target.value = original + (original && !original.endsWith("\n") ? "\n" : "") + spoken;
+      } else if (spoken) {
+        if (!target.textContent.trim()) target.replaceChildren();
+        else {
+          const last = target.lastChild;
+          const endsWithBreak = last?.nodeName === "BR" || (last?.nodeType === 3 && /\n$/.test(last.textContent));
+          if (!endsWithBreak) target.appendChild(document.createElement("br"));
+        }
+        target.appendChild(document.createTextNode(spoken));
+      }
       target.focus();
     };
     recognition.onerror = () => alert("語音辨識沒有成功，請確認麥克風權限後再試一次。");
